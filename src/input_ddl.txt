@@ -8,10 +8,7 @@ DATABASE mydb :=
 
 DATABASE mydb :=
     SCHEMA public,
-    SCHEMA library :=
-        RELATION publisher,
-        RELATION book,
-        RELATION author
+    SCHEMA library
 ;
 
 DATABASE mydb :=

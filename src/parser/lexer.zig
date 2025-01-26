@@ -83,12 +83,13 @@ pub const Lexer = struct {
             '\'' => Token.init(self.readString(), .String),
             '"' => Token.init(ch, .Quote),
             '<' => switch (self.peek().?) {
+                '=' => self.pairAndAdvance(pair, .LessThanEqual),
                 '<' => self.pairAndAdvance(pair, .LeftSemiJoin),
-                // '|' => self.pairAndAdvance(pair, .LeftOuterJoin),
                 // '>' => self.pairAndAdvance(pair, .FullOuterJoin),
                 else => Token.init(ch, .LessThan),
             },
             '>' => switch (self.peek().?) {
+                '=' => self.pairAndAdvance(pair, .GreaterThanEqual),
                 '<' => self.pairAndAdvance(pair, .NaturalJoin),
                 '>' => self.pairAndAdvance(pair, .RightSemiJoin),
                 else => Token.init(ch, .GreaterThan),

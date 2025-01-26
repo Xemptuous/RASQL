@@ -30,7 +30,9 @@ pub const TokenType = enum {
     Apostrophe, // '
     Quote, // "
     LessThan, // <
+    LessThanEqual, // <=
     GreaterThan, // >
+    GreaterThanEqual, // >=
     Comma, // ,
     Period, // .
     Question, // ?

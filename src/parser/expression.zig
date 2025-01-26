@@ -86,7 +86,8 @@ pub const ExpressionType = enum {
     ColumnDDL,
     ForeignKey,
     SelectDML,
-    InfixExpression,
+    Infix,
+    Call,
     ProjectClause,
     RenameClause,
     Rows,
@@ -106,10 +107,14 @@ pub const Expression = union(ExpressionType) {
         table: *Expression, // Identifier
     },
     SelectDML: ArrayList(*Expression),
-    InfixExpression: struct {
+    Infix: struct {
         left: *Expression,
         op: []const u8,
         right: *Expression,
+    },
+    Call: struct {
+        func: *Expression,
+        args: ?ArrayList(*Expression),
     },
     ProjectClause: ArrayList(*Expression),
     RenameClause: struct {
@@ -124,13 +129,23 @@ pub const Expression = union(ExpressionType) {
 
     pub fn print(self: Expression) void {
         switch (self) {
-            .InfixExpression => |i| {
+            .Infix => |i| {
                 std.debug.print("InfixExpression ( left = ", .{});
                 i.left.print();
                 std.debug.print(", op = ({s})", .{i.op});
                 std.debug.print(", right = ", .{});
                 i.right.print();
                 std.debug.print(" ),", .{});
+            },
+            .Call => |i| {
+                std.debug.print("CallExpression ( function = ", .{});
+                i.func.print();
+                if (i.args != null) {
+                    std.debug.print(", args = ", .{});
+                    for (i.args.?.items) |arg| {
+                        arg.print();
+                    }
+                }
             },
             .Identifier => |i| std.debug.print("Identifier({s})", .{i}),
             .String => |i| std.debug.print("String({s})", .{i}),
@@ -184,10 +199,11 @@ pub const Precedence = enum(u8) {
     pub fn get(token_type: TokenType) ?Precedence {
         return switch (token_type) {
             .Equality, .Equal, .NotEqual => Precedence.Equals,
-            .LessThan => Precedence.LessGreater,
-            .GreaterThan => Precedence.LessGreater,
+            .LessThan, .LessThanEqual => Precedence.LessGreater,
+            .GreaterThan, .GreaterThanEqual => Precedence.LessGreater,
             .Plus, .Dash => Precedence.Sum,
-            .Slash, .Asterisk, .Ampersand, .NaturalJoin => Precedence.Product,
+            .NaturalJoin, .LeftSemiJoin, .RightSemiJoin, .AntiJoin => Precedence.Sum,
+            .Slash, .Asterisk, .Ampersand => Precedence.Product,
             .Lparen, .Period => Precedence.Call,
             .Lbracket => Precedence.Index,
             else => null,
@@ -222,8 +238,8 @@ pub const Prefix = enum {
 
 pub const Infix = enum {
     Standard,
-    // Call,
-    // Index,
+    Call,
+    Index,
 
     pub fn get(token_type: TokenType) ?Infix {
         return switch (token_type) {
@@ -233,13 +249,15 @@ pub const Infix = enum {
             .Asterisk => Infix.Standard, // Cartesian Product
             .Ampersand => Infix.Standard, // Intersection
             .NaturalJoin => Infix.Standard,
+            .LeftSemiJoin, .RightSemiJoin => Infix.Standard,
+            .AntiJoin => Infix.Standard,
             .Equality => Infix.Standard,
             .Equal => Infix.Standard,
             .NotEqual => Infix.Standard,
-            .LessThan => Infix.Standard,
-            .GreaterThan => Infix.Standard,
-            // .Lparen => Infix.Call,
-            // .Lbracket => Infix.Index,
+            .LessThan, .LessThanEqual => Infix.Standard,
+            .GreaterThan, .GreaterThanEqual => Infix.Standard,
+            .Lparen => Infix.Call,
+            .Lbracket => Infix.Index,
             else => null,
         };
     }

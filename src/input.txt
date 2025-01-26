@@ -78,4 +78,14 @@ RELATION book_authors + {
     (8, 6)  // "Romance Revisited" co-authored by Emily Winters
 };
 
+NewBooks :=
+    F: book
+    P: *
+    S: publication_year >= 2000
+;
+
 AuthorBooks := book_authors >< author >< book;
+NewAuthorBooks := AuthorBooks << NewBooks;
+OldAuthorBooks := AuthorBooks !> NewBooks;
+
+RETURN NewAuthorBooks;

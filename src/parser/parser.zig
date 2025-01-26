@@ -405,32 +405,6 @@ pub const Parser = struct {
         return s;
     }
 
-    fn parseExpressionStatement(self: *Parser) ParserError!*Statement {
-        const expr = try self.parseExpression(Precedence.Lowest);
-        const s = self.gpa.create(Statement) catch {
-            return ParserError.OutOfMemory;
-        };
-        s.* = Statement{ .ExpressionStatement = .{ .expression = expr } };
-        return s;
-    }
-
-    fn parseInfixExpression(self: *Parser, left: *Expression) ParserError!*Expression {
-        const precedence = self.currPrecedence();
-        const op = self.curr.literal;
-        try self.nextToken();
-        const right = try self.parseExpression(precedence);
-
-        const e = self.gpa.create(Expression) catch {
-            return ParserError.OutOfMemory;
-        };
-        e.* = Expression{ .InfixExpression = .{
-            .left = left,
-            .op = op,
-            .right = right,
-        } };
-        return e;
-    }
-
     fn parseExpression(self: *Parser, precedence: Precedence) ParserError!*Expression {
         std.debug.print("PREFIX TOK: {?}\n", .{self.curr.type});
         const prefix = Prefix.get(self.curr.type);
@@ -456,9 +430,66 @@ pub const Parser = struct {
 
             left = switch (infix.?) {
                 Infix.Standard => try self.parseInfixExpression(left),
+                Infix.Call => try self.parseCallExpression(left),
+                else => try self.parseInfixExpression(left),
+                // Infix.Index => self.parseIndexExpression(left),
             };
         }
         return left;
+    }
+
+    fn parseExpressionStatement(self: *Parser) ParserError!*Statement {
+        const expr = try self.parseExpression(Precedence.Lowest);
+        const s = self.gpa.create(Statement) catch {
+            return ParserError.OutOfMemory;
+        };
+        s.* = Statement{ .ExpressionStatement = .{ .expression = expr } };
+        return s;
+    }
+
+    fn parseInfixExpression(self: *Parser, left: *Expression) ParserError!*Expression {
+        const precedence = self.currPrecedence();
+        const op = self.curr.literal;
+        try self.nextToken();
+        const right = try self.parseExpression(precedence);
+
+        const e = self.gpa.create(Expression) catch {
+            return ParserError.OutOfMemory;
+        };
+        e.* = Expression{ .Infix = .{
+            .left = left,
+            .op = op,
+            .right = right,
+        } };
+        return e;
+    }
+
+    fn parseCallExpression(self: *Parser, func: *Expression) ParserError!*Expression {
+        const args = try self.parseExpressionList(.Rparen);
+        const e = try self.gpa.create(Expression);
+        e.* = .{ .Call = .{ .func = func, .args = args } };
+        return e;
+    }
+
+    fn parseExpressionList(self: *Parser, end: TokenType) ParserError!ArrayList(*Expression) {
+        var list = ArrayList(*Expression).init(self.gpa);
+        if (self.peek.type == end) {
+            try self.nextToken();
+            return list;
+        }
+
+        try self.nextToken();
+        try list.append(try self.parseExpression(.Lowest));
+
+        while (self.peek.type == .Comma) {
+            try self.nextToken();
+            try self.nextToken();
+            try list.append(try self.parseExpression(.Lowest));
+        }
+
+        if (!self.expect(end))
+            return ParserError.MissingRparen;
+        return list;
     }
 
     fn parseProjectColumns(self: *Parser) ParserError!ArrayList(*Expression) {
