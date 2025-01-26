@@ -84,7 +84,19 @@ NewBooks :=
     S: publication_year >= 2000
 ;
 
+UK_Authors :=
+    F: author
+    P: author_id
+    S: country = 'UK'
+;
+US_Authors :=
+    F: author
+    P: author_id
+    S: country = 'USA'
+;
+
 AuthorBooks := book_authors >< author >< book;
+New_UK_US_AuthorBooks := AuthorBooks << (UK_Authors + US_Authors);
 NewAuthorBooks := AuthorBooks << NewBooks;
 OldAuthorBooks := AuthorBooks !> NewBooks;
 

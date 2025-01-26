@@ -417,6 +417,7 @@ pub const Parser = struct {
             Prefix.Number => try self.parseNumber(),
             Prefix.Boolean => try self.parseBoolean(),
             Prefix.String => try self.parseIdentifier(),
+            Prefix.Grouped => try self.parseGroupedExpression(),
             else => return ParserError.PrefixNotFound,
         };
 
@@ -572,6 +573,14 @@ pub const Parser = struct {
             return ParserError.OutOfMemory;
         r.* = Expression{ .Rows = rows };
         return r;
+    }
+
+    fn parseGroupedExpression(self: *Parser) ParserError!*Expression {
+        try self.nextToken();
+        const e = self.parseExpression(.Lowest);
+        if (!self.expect(.Rparen))
+            return ParserError.MissingRparen;
+        return e;
     }
 
     fn parseString(self: *Parser) ParserError!*Expression {
