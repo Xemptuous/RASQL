@@ -1,0 +1,197 @@
+https://en.wikipedia.org/wiki/Relational_algebra
+
+RA is the HOW
+RC is the WHAT
+
+Relational Algebra:
+	1. Select (σ)
+	2. Project (Π)
+	3. Union (U∪)
+	4. Set Difference (-)
+	5. Cartesian product (X)
+	6. Rename (ρ) 
+	7. Division (÷)
+	8. Intersection (∩)
+
+Joins:
+	9. Theta join: ⋈
+	10. Left semijoin: ⋉
+	11. Right semijoin: ⋊
+	12. Left outer join: ⟕
+	13. Right outer join: ⟖
+	14. Full outer join: ⟗
+	15. Antijoin: ▷ 
+
+Possible Symbols:
+1. Select: S sel [S]
+2. Project: P proj [P]
+3. Union: U | + ||
+4. Set Difference: - \ diff
+5. Cartesian Product: * x ><
+6. Rename: R ren rename
+7. Division: div // /
+8. Intersection: I & &&
+9. Theta join: T join THJ [] >< :>
+10. Left semijoin: LSJ lsemi <| << [:
+11. Right semijoin: RSJ rsemi |> >> :]
+12. Left outer join: LOJ louter [-| [- <-| <<- (|
+13. Right outer join: ROJ router |-] -|> ->| ->> |)
+14. Full outer join: FOJ fouter <> <=> <-> (|)
+15. Antijoin: AJ anti !| !> ~|
+
+Datatypes:
+i8 -> TINYINT
+u8 -> TINYINT UNSIGNED
+i16 -> SMALLINT
+u16 -> SMALLINT UNSIGNED
+i32 -> INTEGER
+u32 -> INTEGER UNSIGNED
+i64 -> BIGINT
+u64 -> BIGINT UNSIGNED
+f32 -> FLOAT
+f64 -> DOUBLE
+dec -> DECIMAL (38, 4)
+str -> VARCHAR/STRING/TEXT (255)
+dt -> DATE
+ts -> TIMESTAMP/DATETIME
+bool -> BOOLEAN
+uuid -> UUID
+json -> JSON
+
+RELATION employee (
+	u32: id
+	str: name
+	u32: department_id
+	dt: start_date
+	ts: ins_ts
+);
+
+RELATION staff (
+	u32: id
+	str: name
+	u32: department_id
+	dec: salary (12, 2)
+	dt: start_date
+	ts: ins_ts
+)
+
+RELATION department (
+	u32: id
+	str: name
+)
+
+RELATION employee INDEX PRIMARY (id);
+RELATION employee INDEX (name);
+RELATION employee INDEX (department_id);
+OR
+RELATION employee INDEXES {
+	(id) PRIMARY,
+	(name),
+	(department_id)
+}
+OR
+RELATION employee (
+	u32: id
+	str: name
+	u32: department_id
+	dt: start_date
+	ts: ins_ts
+) INDEXES {
+	(id) PRIMARY,
+	(name),
+	(department_id),
+};
+
+RELATION employee UNION {
+	(1, 'John', 1, '2024-01-01', '2024-01-01 02:20:54'),
+	(2, 'Mike', 1, '2024-01-03', '2024-01-02 08:15:10'),
+	(3, 'Edgar', 2, '2024-01-02', '2024-01-03 18:52:05'),
+};
+
+// semijoin OR restriction - both names applicable, similar to INNER JOIN ON 
+sales_employees := {employee} SEMIJOIN {department} ON (department.id = employee.department_id) WHERE (department.id = 1)
+new_sales_employees := 
+	{
+		employee(id, name, start_date)
+		CONDITION start_date > '2024-01-01'
+	} 
+	ANTIJOIN {department} ON (department.id = employee.department_id AND department.id != 1)
+
+
+/// loops?
+FOR i := 0..100 {
+}
+/// conditionals/case?
+i := 5 > 0 ? 0 : 1
+col := 5 > 6 ? 1 : 0
+col := 1 if 5 > 6 else 0
+
+
+SalesEmployee := E << SD
+///
+E :=
+	[S] employee
+	[P] id, name, department_id
+S := 
+	[S] staff
+	[P] id, name, department_id
+D :=
+	[S] department
+	[P] id, name
+	[R] id -> department_id
+
+E :=
+	[S] employee
+	[P] id, name, department_id
+SD :=
+	[S] department
+	[P] id
+	[R] id -> department_id
+	[W] name = 'Sales'
+
+Union (E + D):
+	All rows from both employee and staff
+	EmployeeAndStaff := E + S
+
+Difference (E - SD):
+	Find employees that are not in the sales department.
+	NotSales := E - SD
+
+Intersection (E & SD):
+	Find employees who are in both the employee and sales department sets.
+	SalesEmployees := E & SD
+
+Cartesian Product (E * D):
+	Combine each employee with each department, forming all possible pairs.
+	EmployeeDepartmentPairs := E * D
+
+Division (E / D):
+	Find all employees who work in every department (division of two relations). This query would show employees who belong to all departments listed in D.
+	EmployeesInAllDepartments := E / D
+
+Theta Join (E [] D):
+	Join employees with departments based on a custom condition, like department name starting with 'S'.
+	DeptsStartingWithS := E [] D [E.department_id = D.id && D.name[0] = 'S']
+
+Left Semijoin (E << SD):
+	Get employees who work in the sales department.
+	SalesEmployee := E << SD
+	
+Right Semijoin (E >> SD):
+	Get departments that have at least one employee.
+	DepartmentsWithEmployees := D >> E
+	
+Left Outer Join (E <<- SD):
+	Get all employees and match them with the sales department, including those who don't work in sales.
+	LeftOuterJoin := E <<- SD
+	
+Right Outer Join (E ->> SD):
+	Get all departments and match them with employees, including departments without employees.
+	RightOuterJoin := E ->> D
+
+Full Outer Join (E <-> SD):
+	Retrieve all employees and departments, matching them where possible, and including unmatched ones.
+	
+Antijoin (E !> SD):
+	Find employees who do not work in the sales department.
+	NotSalesEmployee := E !> SD

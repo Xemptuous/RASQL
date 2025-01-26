@@ -1,0 +1,46 @@
+RELATION employee (
+    u32: id,
+    str: name,
+    i32: department_id,
+    f32: salary,
+    dt:  start_date,
+    ts:  ins_ts,
+    bool:is_active,
+);
+RELATION employee + {
+    (1, 'John Doe', 1, 48250.23, '2024-02-01', '2025-01-10 00:00:00', true),
+    (2, 'Mike Moe', 1, 52380.00, '2024-05-25', '2025-01-10 00:00:00', false),
+    (3, 'Jessica Resica', 2, 49725.05, '2024-03-04', '2025-01-10 00:00:00', true)
+};
+RELATION department (
+    u32: id,
+    str: name,
+);
+RELATION department + {
+    (1, 'Sales'),
+    (2, 'Admin')
+};
+E :=
+    F: employee
+    P: id, name, department_id
+;
+D :=
+    F: department
+    P: id, name
+    R: id -> department_id
+;
+SalesDepartment :=
+    F: department
+    P: id
+    R: id -> department_id
+    W: name = 'Sales'
+;
+NotSalesEmployees := E - SD;
+RETURN NotSalesEmployees;
+RETURN
+    F: employee
+    P: id, fname, is_active
+    W: id > 1
+    && is_active = true
+    L: 20
+;

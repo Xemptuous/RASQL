@@ -1,0 +1,111 @@
+
+RELATION employee (
+	u32: id PRIMARY
+	str: name
+	u32: department_id
+	dt: start_date
+	ts: ins_ts
+);
+INDEX employee (
+	(name),
+	(department_id),
+	(start_date),
+	(ins_ts),
+);
+
+RELATION staff (
+	u32: id PRIMARY INCREMENT
+	str: first_name
+	u32: department_id
+	dec: salary (12, 2)
+	dt: start_date
+	ts: ins_ts
+);
+
+RELATION department (
+	u32: id PRIMARY INCREMENT
+	str: name
+);
+
+
+RELATION employee + {
+	(1, 'John', 1, '2024-01-01', '2024-01-01 02:20:54'),
+	(2, 'Mike', 1, '2024-01-03', '2024-01-02 08:15:10'),
+	(3, 'Jessica', 2, '2024-01-02', '2024-01-03 18:52:05'),
+};
+
+RELATION staff + {
+	('Sally', 2, '2024-01-01', '2024-01-01 05:08:24'),
+	('Edward', 1, '2024-01-07', '2024-01-02 18:31:18'),
+	('Monica', 2, '2024-01-04', '2024-01-03 03:28:45'),
+};
+
+RELATION department + { ('Sales'), ('Admin'), ('Production') };
+
+RETURN 
+	F: employee
+	S: *
+;
+
+DEFINE
+E :=
+	F: employee
+	P: id, name, department_id
+	S: *
+S :=
+	F: staff
+	P: id, name, department_id
+	R: name -> first_name
+D :=
+	F: department
+	P: 
+		id,
+		name,
+		first_letter: name[0], 
+		is_letter_z: match name[0] {
+			'Z' | 'z' => true,
+			else => false
+		},
+	R: id -> department_id
+D :=
+	F: department
+	P: id, name
+	R: id -> department_id
+SD :=
+	F: department
+	P: id
+	R: id -> department_id
+	S: name = 'Sales' 
+
+EmployeeAndStaff := E + S; // Union
+NotSales := E - SD; // Difference
+SalesEmployees := E & SD; // Intersection
+EmployeeDepartmentPairs := E * D; // Cartesian Product
+EmployeesInAllDepartments := E / D; // Division
+SalesEmployee := E << SD; // Left Semi-join
+DepartmentsWithEmployees := D >> E; // Right Semi-join
+NotSalesEmployee := E !> SD; // Anti-join
+
+SalesAndProdDepartments :=
+    F: department
+    P: id, name
+    R: id -> department_id
+    W: name = 'Sales' || name = 'Production'
+
+SalesAndProdEmployees := E << SalesAndProdDepartments;
+Other Departments := E !> SalesAndProdDepartments;
+
+// Theta idea (and equijoin (= in where))
+// car + boat
+// car:  model + price
+// boat: model + price
+Theta := Car {} Boat {Car.price > Boat.price};
+
+// unneeded in relational algebra
+LeftOuterJoin := E <<- SD; // Left Outer-join
+RightOuterJoin := E ->> D; // Right Outer-join
+All := E <-> SD; // Full Outer-join
+
+DEFEND
+
+RETURN EmployeeAndStaff

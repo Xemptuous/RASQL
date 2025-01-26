@@ -1,0 +1,69 @@
+RELATION book (
+    u32: book_id,
+    str: title,
+    str: isbn,
+    u16: publication_year,
+    str: genre,
+    str: language,
+    u32: pages,
+    u32: publisher_id
+);
+RELATION book + {
+    (1, 'The Great Gatsby', '9780743273565', 1925, 'Novel', 'English', 180, 1),
+    (2, '1984', '9780451524935', 1949, 'Dystopian', 'English', 328, 2),
+    (3, 'One Hundred Years of Solitude', '9780060883287', 1967, 'Magical Realism', 'Spanish', 417, 3),
+    (4, 'Pride and Prejudice', '9780141439518', 1813, 'Romance', 'English', 279, 1),
+    (5, 'Animal Farm', '9780451526342', 1945, 'Political Satire', 'English', 112, 2),
+    (6, 'Timeless Tales', '9781234567890', 2000, 'Anthology', 'English', 350, 1),
+    (7, 'The Wanderer\'s Guide', '9789876543210', 2015, 'Fantasy', 'English', 400, 4),
+    (8, 'Romance Revisited', '9781928374650', 2020, 'Romance', 'English', 310, 5)
+};
+
+RELATION author (
+    u32: author_id,
+    str: name,
+    str: country,
+    dt:  dob
+);
+RELATION author + {
+    (1, 'F. Scott Fitzgerald', 'USA', '1896-09-24'),
+    (2, 'George Orwell', 'UK', '1903-06-25'),
+    (3, 'Gabriel García Márquez', 'Colombia', '1927-03-06'),
+    (4, 'Jane Austen', 'UK', '1775-12-16'),
+    (5, 'A. N. Other', 'Canada', '1980-01-01'),
+    (6, 'Emily Winters', 'Australia', '1975-07-15')
+};
+
+RELATION publisher (
+    u32: publisher_id,
+    str: name,
+    str: address,
+    str: website
+);
+RELATION publisher + {
+    (1, 'Charles Scribner\'s Sons', 'New York, USA', 'https://www.scribners.com'),
+    (2, 'Secker & Warburg', 'London, UK', 'https://www.seckerwarburg.com'),
+    (3, 'Harper & Row', 'New York, USA', 'https://www.harperrow.com'),
+    (4, 'Wayfarer Publishing', 'Melbourne, Australia', 'https://www.wayfarerpublishing.com'),
+    (5, 'Hearts & Minds Press', 'Toronto, Canada', 'https://www.heartsandmindspress.com')
+};
+
+// many to many relationship table
+RELATION book_authors (
+    u32: book_id,
+    u32: author_id
+);
+RELATION book_authors + {
+    (1, 1), // "The Great Gatsby" by F. Scott Fitzgerald
+    (2, 2), // "1984" by George Orwell
+    (3, 3), // "One Hundred Years of Solitude" by Gabriel García Márquez
+    (4, 4), // "Pride and Prejudice" by Jane Austen
+    (5, 2), // "Animal Farm" by George Orwell
+    (6, 1), // "Timeless Tales" by F. Scott Fitzgerald
+    (6, 3), // "Timeless Tales" co-authored by Gabriel García Márquez
+    (7, 5), // "The Wanderer's Guide" by A. N. Other
+    (8, 4), // "Romance Revisited" by Jane Austen
+    (8, 6)  // "Romance Revisited" co-authored by Emily Winters
+};
+
+AuthorBooks := book_authors >< author >< book;
