@@ -1,0 +1,47 @@
+CREATE DATABASE mydb;
+DELETE DATABASE mydb;
+
+DATABASE mydb :=
+    SCHEMA public,
+    SCHEMA library
+;
+
+DATABASE mydb :=
+    SCHEMA public,
+    SCHEMA library :=
+        RELATION publisher,
+        RELATION book,
+        RELATION author
+;
+
+DATABASE mydb :=
+    SCHEMA public,
+    SCHEMA library :=
+        RELATION publisher :=
+            u32: publisher_id,
+            str: name,
+            str: address,
+            str: website
+
+            pk: publisher_id
+        RELATION book :=
+            u32: book_id,
+            str: title,
+            str: isbn,
+            u16: publication_year,
+            str: genre,
+            str: language,
+            u32: pages,
+            u32: publisher_id
+
+            pk: book_id,
+            fk: publisher_id -> publisher
+        RELATION author :=
+            u32: author_id,
+            str: name,
+            str: country,
+            dt:  dob
+
+            pk: author_id
+;
+

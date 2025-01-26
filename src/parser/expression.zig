@@ -3,19 +3,6 @@ const ArrayList = std.ArrayList;
 const TokenType = @import("token.zig").TokenType;
 const Decimal = struct { length: u8, precision: u8 };
 
-pub const ExpressionType = enum {
-    ColumnDDL,
-    SelectDML,
-    InfixExpression,
-    ProjectClause,
-    RenameClause,
-    Rows,
-    Identifier,
-    String,
-    Number,
-    Boolean,
-};
-
 pub const DataType = enum(u8) {
     Int8,
     Int16,
@@ -95,10 +82,28 @@ pub const NumberUnion = union(NumberDataType) {
     }
 };
 
+pub const ExpressionType = enum {
+    ColumnDDL,
+    ForeignKey,
+    SelectDML,
+    InfixExpression,
+    ProjectClause,
+    RenameClause,
+    Rows,
+    Identifier,
+    String,
+    Number,
+    Boolean,
+};
+
 pub const Expression = union(ExpressionType) {
     ColumnDDL: struct {
         name: []const u8,
         dtype: DataType,
+    },
+    ForeignKey: struct {
+        column: *Expression, // Identifier
+        table: *Expression, // Identifier
     },
     SelectDML: ArrayList(*Expression),
     InfixExpression: struct {
@@ -108,8 +113,8 @@ pub const Expression = union(ExpressionType) {
     },
     ProjectClause: ArrayList(*Expression),
     RenameClause: struct {
-        from: *Expression,
-        to: *Expression,
+        from: *Expression, // Identifier
+        to: *Expression, // Identifier
     },
     Rows: ArrayList(*Expression),
     Identifier: []const u8,
@@ -155,6 +160,11 @@ pub const Expression = union(ExpressionType) {
                 r.from.print();
                 std.debug.print(" -> ", .{});
                 r.to.print();
+            },
+            .ForeignKey => |f| {
+                f.column.print();
+                std.debug.print(" -> ", .{});
+                f.table.print();
             },
             else => std.debug.print("null", .{}),
         }

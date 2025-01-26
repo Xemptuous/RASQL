@@ -2,10 +2,16 @@ const std = @import("std");
 
 pub const TokenType = enum {
     // Keywords
+    Database,
+    Schema,
     Relation,
     Index,
     Define,
     Return,
+    PrimaryKey,
+    ForeignKey,
+    Create,
+    Delete,
     // Chars
     Bang, // !
     At, // @
@@ -135,6 +141,12 @@ pub const KEYWORDS = std.StaticStringMap(TokenType).initComptime(.{
     .{ "false", .False },
     .{ "uuid", .UUID },
     .{ "json", .JSON },
+    .{ "pk", .PrimaryKey },
+    .{ "fk", .ForeignKey },
+    .{ "create", .Create },
+    .{ "delete", .Delete },
+    .{ "database", .Database },
+    .{ "schema", .Schema },
     .{ "relation", .Relation },
     .{ "index", .Index },
     .{ "define", .Define },

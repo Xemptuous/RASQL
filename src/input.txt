@@ -1,4 +1,20 @@
-RELATION book (
+RELATION publisher :=
+    u32: publisher_id,
+    str: name,
+    str: address,
+    str: website,
+
+    pk: publisher_id
+;
+RELATION publisher + {
+    (1, 'Charles Scribner\'s Sons', 'New York, USA', 'https://www.scribners.com'),
+    (2, 'Secker & Warburg', 'London, UK', 'https://www.seckerwarburg.com'),
+    (3, 'Harper & Row', 'New York, USA', 'https://www.harperrow.com'),
+    (4, 'Wayfarer Publishing', 'Melbourne, Australia', 'https://www.wayfarerpublishing.com'),
+    (5, 'Hearts & Minds Press', 'Toronto, Canada', 'https://www.heartsandmindspress.com')
+};
+
+RELATION book :=
     u32: book_id,
     str: title,
     str: isbn,
@@ -6,8 +22,11 @@ RELATION book (
     str: genre,
     str: language,
     u32: pages,
-    u32: publisher_id
-);
+    u32: publisher_id,
+
+    pk: book_id,
+    fk: publisher_id -> publisher
+;
 RELATION book + {
     (1, 'The Great Gatsby', '9780743273565', 1925, 'Novel', 'English', 180, 1),
     (2, '1984', '9780451524935', 1949, 'Dystopian', 'English', 328, 2),
@@ -19,12 +38,14 @@ RELATION book + {
     (8, 'Romance Revisited', '9781928374650', 2020, 'Romance', 'English', 310, 5)
 };
 
-RELATION author (
+RELATION author :=
     u32: author_id,
     str: name,
     str: country,
-    dt:  dob
-);
+    dt:  dob,
+
+    pk: author_id
+;
 RELATION author + {
     (1, 'F. Scott Fitzgerald', 'USA', '1896-09-24'),
     (2, 'George Orwell', 'UK', '1903-06-25'),
@@ -34,25 +55,16 @@ RELATION author + {
     (6, 'Emily Winters', 'Australia', '1975-07-15')
 };
 
-RELATION publisher (
-    u32: publisher_id,
-    str: name,
-    str: address,
-    str: website
-);
-RELATION publisher + {
-    (1, 'Charles Scribner\'s Sons', 'New York, USA', 'https://www.scribners.com'),
-    (2, 'Secker & Warburg', 'London, UK', 'https://www.seckerwarburg.com'),
-    (3, 'Harper & Row', 'New York, USA', 'https://www.harperrow.com'),
-    (4, 'Wayfarer Publishing', 'Melbourne, Australia', 'https://www.wayfarerpublishing.com'),
-    (5, 'Hearts & Minds Press', 'Toronto, Canada', 'https://www.heartsandmindspress.com')
-};
-
 // many to many relationship table
-RELATION book_authors (
+RELATION book_authors :=
     u32: book_id,
-    u32: author_id
-);
+    u32: author_id,
+
+    pk: (book_id, author_id),
+    fk: book_id -> book,
+    fk: author_id -> author
+;
+
 RELATION book_authors + {
     (1, 1), // "The Great Gatsby" by F. Scott Fitzgerald
     (2, 2), // "1984" by George Orwell

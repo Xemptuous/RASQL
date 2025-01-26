@@ -81,10 +81,12 @@ pub const Parser = struct {
             }
 
             stmt = switch (self.curr.type) {
-                .Return => try self.parseReturnStatement(),
+                // .Delete => try self.parseDeleteStatement(),
+                // .Database => try self.parseDatabaseStatement(),
                 .Relation => try self.parseRelationStatement(),
                 .Define => try self.parseDefineStatement(),
                 .Identifier => if (self.peek.type == .Assign) try self.parseDefineStatement() else try self.parseReturnStatement(),
+                .Return => try self.parseReturnStatement(),
                 else => try self.parseReturnStatement(),
             };
             std.debug.print("MAIN MID: CURR: {?} PEEK: {?}\n", .{ self.curr.type, self.peek.type });
@@ -99,6 +101,8 @@ pub const Parser = struct {
         }
         return statements;
     }
+
+    // fn parseDatabaseStatement(self: *Parser) ParserError!*Statement {}
 
     fn parseDefineStatement(self: *Parser) ParserError!*Statement {
         std.debug.print("  DEFINE START: CURR: {?} PEEK: {?}\n", .{ self.curr.type, self.peek.type });
@@ -193,7 +197,7 @@ pub const Parser = struct {
         if (!self.expect(.Identifier))
             return ParserError.MissingIdentifier;
         const stmt = switch (self.peek.type) {
-            .Lparen => try self.parseCreateRelationStatement(),
+            .Assign => try self.parseCreateRelationStatement(),
             .Plus => try self.parseUnionRelationStatement(),
             else => return ParserError.InvalidCharacter,
         };
@@ -239,49 +243,129 @@ pub const Parser = struct {
             return ParserError.InvalidRelationName;
         const relation_name = self.curr.literal;
 
-        // advance past lparen
+        // advance past assign
         try self.nextToken();
         try self.nextToken();
 
-        var ddl = ArrayList(*Expression).init(self.gpa);
-        while (self.curr.type != .Rparen and self.curr.type != .EOF) {
-            const dtype: DataType = switch (self.curr.type) {
-                .I8 => .Int8,
-                .I16 => .Int16,
-                .I32 => .Int32,
-                .I64 => .Int64,
-                .U8 => .Uint8,
-                .U16 => .Uint16,
-                .U32 => .Uint32,
-                .U64 => .Uint64,
-                .F32 => .Float32,
-                .F64 => .Float64,
-                .String => .String,
-                .Date => .Date,
-                .Timestamp => .Timestamp,
-                .Boolean => .Boolean,
-                else => return ParserError.InvalidDataType,
-            };
+        var columns = ArrayList(*Expression).init(self.gpa);
+        var pks = ArrayList(*Expression).init(self.gpa);
+        var fks = ArrayList(*Expression).init(self.gpa);
+        while (self.curr.type != .Semicolon and self.curr.type != .EOF) {
+            if (self.curr.type == .PrimaryKey) {
+                std.debug.print("PRIMARY KEY\n", .{});
+                if (!self.expect(.Colon))
+                    return ParserError.MissingColon;
+                try self.nextToken();
+                pks = try self.parseRelationPrimaryKeys();
+            } else if (self.curr.type == .ForeignKey) {
+                std.debug.print("FOREIGN KEY\n", .{});
+                if (!self.expect(.Colon))
+                    return ParserError.MissingColon;
+                if (!self.expect(.Identifier))
+                    return ParserError.MissingIdentifier;
+                const fk = try self.parseRelationForeignKey();
+                try fks.append(fk);
+            } else {
+                std.debug.print("COLUMN\n", .{});
+                const expr = try self.parseColumnDDLExpression();
+                try columns.append(expr);
+            }
 
-            if (!self.expect(.Colon))
-                return ParserError.MissingColon;
-            try self.nextToken();
+            std.debug.print("RELATION LOOP CURR: {?}  PEEK: {?}\n", .{ self.curr.type, self.peek.type });
 
-            if (self.curr.type != .Identifier)
-                return ParserError.InvalidColumnName;
-            const name = self.curr.literal;
-
-            if (!self.expect(.Comma) and self.peek.type != .Rparen)
+            if (self.peek.type == .Semicolon)
+                break;
+            if (!self.expect(.Comma))
                 return ParserError.MissingComma;
             try self.nextToken();
-            const expr = try self.gpa.create(Expression);
-            expr.* = .{ .ColumnDDL = .{ .dtype = dtype, .name = name } };
-            try ddl.append(expr);
         }
 
         const rel = try self.gpa.create(Statement);
-        rel.* = .{ .CreateRelation = .{ .name = relation_name, .ddl = ddl } };
+        rel.* = .{ .CreateRelation = .{
+            .name = relation_name,
+            .primary_keys = pks,
+            .foreign_keys = fks,
+            .columns = columns,
+        } };
         return rel;
+    }
+
+    fn parseRelationPrimaryKeys(self: *Parser) ParserError!ArrayList(*Expression) {
+        var pks = ArrayList(*Expression).init(self.gpa);
+        switch (self.curr.type) {
+            .Lparen => {
+                while (self.peek.type != .Rparen or self.peek.type != .EOF) {
+                    try self.nextToken();
+                    if (self.curr.type == .Rparen) break;
+                    if (self.curr.type != .Identifier)
+                        return ParserError.InvalidColumnName;
+                    const name = try self.parseIdentifier();
+                    if (!self.expect(.Comma) and self.peek.type != .Rparen)
+                        return ParserError.MissingComma;
+                    try pks.append(name);
+                }
+            },
+            .Identifier => {
+                const ident = try self.parseIdentifier();
+                try pks.append(ident);
+            },
+            else => return ParserError.MissingIdentifier,
+        }
+        return pks;
+    }
+
+    fn parseRelationForeignKey(self: *Parser) ParserError!*Expression {
+        std.debug.print("FK CURR: {?}  PEEK: {?}\n", .{ self.curr.type, self.peek.type });
+        const column = try self.parseIdentifier();
+
+        if (!self.expect(.SingleArrow))
+            return ParserError.MissingSingleArrow;
+
+        if (!self.expect(.Identifier))
+            return ParserError.MissingIdentifier;
+        const table = try self.parseIdentifier();
+
+        const e = try self.gpa.create(Expression);
+        e.* = .{ .ForeignKey = .{
+            .column = column,
+            .table = table,
+        } };
+        return e;
+    }
+
+    fn parseColumnDDLExpression(self: *Parser) ParserError!*Expression {
+        const dtype: DataType = switch (self.curr.type) {
+            .I8 => .Int8,
+            .I16 => .Int16,
+            .I32 => .Int32,
+            .I64 => .Int64,
+            .U8 => .Uint8,
+            .U16 => .Uint16,
+            .U32 => .Uint32,
+            .U64 => .Uint64,
+            .F32 => .Float32,
+            .F64 => .Float64,
+            .String => .String,
+            .Date => .Date,
+            .Timestamp => .Timestamp,
+            .Boolean => .Boolean,
+            else => return ParserError.InvalidDataType,
+        };
+
+        if (!self.expect(.Colon))
+            return ParserError.MissingColon;
+        try self.nextToken();
+
+        if (self.curr.type != .Identifier)
+            return ParserError.InvalidColumnName;
+        const name = self.curr.literal;
+
+        // if (!self.expect(.Comma) and self.peek.type != .Rparen)
+        //     return ParserError.MissingComma;
+        // try self.nextToken();
+        const expr = try self.gpa.create(Expression);
+        expr.* = .{ .ColumnDDL = .{ .dtype = dtype, .name = name } };
+        return expr;
     }
 
     fn parseReturnStatement(self: *Parser) ParserError!*Statement {

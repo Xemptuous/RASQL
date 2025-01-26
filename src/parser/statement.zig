@@ -8,7 +8,12 @@ const Expression = @import("expression.zig").Expression;
 
 pub const StatementType = enum {
     Return,
+    CreateSchema,
+    DeleteSchema,
+    CreateDatabase,
+    DeleteDatabase,
     CreateRelation,
+    DeleteRelation,
     UnionRelation,
     DefineStatement,
     ExpressionStatement,
@@ -21,14 +26,34 @@ pub const Statement = union(StatementType) {
         limit: ?*Expression, // Number
         select: ?ArrayList(*Expression),
     },
+
+    // Schema
+    CreateSchema: struct {
+        name: []const u8,
+        relations: ?ArrayList(*Statement), // CreateRelation statements
+    },
+    DeleteSchema: []const u8,
+
+    // Database
+    CreateDatabase: struct {
+        name: []const u8,
+        schema: ?ArrayList(*Statement),
+    },
+    DeleteDatabase: []const u8,
+
+    // Relation
     CreateRelation: struct {
         name: []const u8,
-        ddl: ArrayList(*Expression),
+        primary_keys: ArrayList(*Expression),
+        foreign_keys: ArrayList(*Expression),
+        columns: ArrayList(*Expression),
     },
+    DeleteRelation: []const u8,
     UnionRelation: struct {
         left: *Expression, // Identifier
         rows: ArrayList(*Expression),
     },
+
     DefineStatement: struct {
         name: *Expression,
         from: ?*Expression,
@@ -71,10 +96,27 @@ pub const Statement = union(StatementType) {
             .CreateRelation => |s| {
                 std.debug.print("Statement.CreateRelation:\n", .{});
                 std.debug.print("  Name: {s}\n", .{s.name});
-                std.debug.print("  DDL:\n", .{});
-                for (s.ddl.items) |i| {
+                std.debug.print("  Columns:\n", .{});
+                for (s.columns.items) |i| {
                     std.debug.print("    ", .{});
                     i.print();
+                    std.debug.print("\n", .{});
+                }
+                if (s.primary_keys.items.len != 0) {
+                    std.debug.print("  Primary Key: ( ", .{});
+                    for (s.primary_keys.items) |i| {
+                        i.print();
+                        std.debug.print(", ", .{});
+                    }
+                    std.debug.print(" )\n", .{});
+                }
+                if (s.foreign_keys.items.len != 0) {
+                    std.debug.print("  Foreign Keys:\n", .{});
+                    for (s.foreign_keys.items) |i| {
+                        std.debug.print("    ", .{});
+                        i.print();
+                        std.debug.print(",\n", .{});
+                    }
                     std.debug.print("\n", .{});
                 }
             },
@@ -116,8 +158,8 @@ pub const Statement = union(StatementType) {
                         std.debug.print(", ", .{});
                     }
                 }
-                std.debug.print("\n  Select:\n", .{});
                 if (d.select != null) {
+                    std.debug.print("\n  Select:\n", .{});
                     for (d.select.?.items) |i| {
                         std.debug.print("    ", .{});
                         i.print();
@@ -130,6 +172,7 @@ pub const Statement = union(StatementType) {
                 }
                 std.debug.print("\n", .{});
             },
+            else => {},
         }
     }
 };
