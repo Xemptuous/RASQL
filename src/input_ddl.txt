@@ -1,19 +1,28 @@
+// Database + Schema (Group)
 CREATE DATABASE mydb;
 DELETE DATABASE mydb;
 
+CREATE GROUP mydb.public;
+CREATE GROUP mydb.library;
+
+RELATION mydb.library.publisher :=
+    u32: publisher_id,
+    str: name,
+    str: address,
+    str: website
+
+    pk: publisher_id
+;
+
+// alternate syntax
 DATABASE mydb :=
-    SCHEMA public,
-    SCHEMA library
+    GROUP public,
+    GROUP library
 ;
 
 DATABASE mydb :=
-    SCHEMA public,
-    SCHEMA library
-;
-
-DATABASE mydb :=
-    SCHEMA public,
-    SCHEMA library :=
+    GROUP public,
+    GROUP library :=
         RELATION publisher :=
             u32: publisher_id,
             str: name,

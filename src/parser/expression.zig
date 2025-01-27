@@ -86,7 +86,7 @@ pub const ExpressionType = enum {
     ColumnDDL,
     ForeignKey,
     SelectDML,
-    Infix,
+    InfixExpression,
     Call,
     ProjectClause,
     RenameClause,
@@ -97,39 +97,47 @@ pub const ExpressionType = enum {
     Boolean,
 };
 
+pub const ColumnDDL = struct {
+    name: []const u8,
+    dtype: DataType,
+};
+pub const ForeignKey = struct {
+    column: *Expression, // Identifier
+    table: *Expression, // Identifier
+};
+pub const InfixExpression = struct {
+    left: *Expression,
+    op: []const u8,
+    right: *Expression,
+};
+pub const Call = struct {
+    func: *Expression,
+    args: ?ArrayList(*Expression),
+};
+pub const RenameClause = struct {
+    from: *Expression, // Identifier
+    to: *Expression, // Identifier
+};
+pub const Identifier = []const u8;
+pub const String = []const u8;
+
 pub const Expression = union(ExpressionType) {
-    ColumnDDL: struct {
-        name: []const u8,
-        dtype: DataType,
-    },
-    ForeignKey: struct {
-        column: *Expression, // Identifier
-        table: *Expression, // Identifier
-    },
-    SelectDML: ArrayList(*Expression),
-    Infix: struct {
-        left: *Expression,
-        op: []const u8,
-        right: *Expression,
-    },
-    Call: struct {
-        func: *Expression,
-        args: ?ArrayList(*Expression),
-    },
-    ProjectClause: ArrayList(*Expression),
-    RenameClause: struct {
-        from: *Expression, // Identifier
-        to: *Expression, // Identifier
-    },
-    Rows: ArrayList(*Expression),
-    Identifier: []const u8,
-    String: []const u8,
-    Number: NumberUnion,
+    ColumnDDL: *const ColumnDDL,
+    ForeignKey: *const ForeignKey,
+    SelectDML: *ArrayList(*Expression),
+    InfixExpression: *const InfixExpression,
+    Call: *const Call,
+    ProjectClause: *ArrayList(*Expression),
+    RenameClause: *const RenameClause,
+    Rows: *ArrayList(*Expression),
+    Identifier: *const Identifier,
+    String: *const String,
+    Number: *const NumberUnion,
     Boolean: bool,
 
     pub fn print(self: Expression) void {
         switch (self) {
-            .Infix => |i| {
+            .InfixExpression => |i| {
                 std.debug.print("InfixExpression ( left = ", .{});
                 i.left.print();
                 std.debug.print(", op = ({s})", .{i.op});
@@ -147,8 +155,8 @@ pub const Expression = union(ExpressionType) {
                     }
                 }
             },
-            .Identifier => |i| std.debug.print("Identifier({s})", .{i}),
-            .String => |i| std.debug.print("String({s})", .{i}),
+            .Identifier => |i| std.debug.print("Identifier({s})", .{i.*}),
+            .String => |i| std.debug.print("String({s})", .{i.*}),
             .Number => |i| {
                 std.debug.print("Number(", .{});
                 i.print();

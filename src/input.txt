@@ -56,7 +56,7 @@ RELATION author + {
 };
 
 // many to many relationship table
-RELATION book_authors :=
+RELATION mydb.mygroup.book_authors :=
     u32: book_id,
     u32: author_id,
 

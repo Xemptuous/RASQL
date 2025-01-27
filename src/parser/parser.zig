@@ -18,7 +18,9 @@ const Precedence = expression.Precedence;
 const Expression = expression.Expression;
 const NumberUnion = expression.NumberUnion;
 
-const Statement = @import("statement.zig").Statement;
+const statement = @import("statement.zig");
+const Statement = statement.Statement;
+const FullyQualifiedName = statement.FullyQualifiedName;
 
 pub const ParserError = error{
     PrefixNotFound,
@@ -72,7 +74,6 @@ pub const Parser = struct {
     pub fn parse(self: *Parser) ParserError!ArrayList(*Statement) {
         var statements = ArrayList(*Statement).init(self.gpa);
         while (self.peek.type != .EOF) {
-            std.debug.print("MAIN START: CURR: {?} PEEK: {?}\n", .{ self.curr.type, self.peek.type });
             var stmt: *Statement = undefined;
 
             if (self.curr.type == .Comment) {
@@ -82,18 +83,17 @@ pub const Parser = struct {
 
             stmt = switch (self.curr.type) {
                 // .Delete => try self.parseDeleteStatement(),
-                // .Database => try self.parseDatabaseStatement(),
+                // .Database => try self.parseDefineDatabaseStatement(),
+                // .Create => try self.parseCreateStatement(),
                 .Relation => try self.parseRelationStatement(),
                 .Define => try self.parseDefineStatement(),
                 .Identifier => if (self.peek.type == .Assign) try self.parseDefineStatement() else try self.parseReturnStatement(),
                 .Return => try self.parseReturnStatement(),
                 else => try self.parseReturnStatement(),
             };
-            std.debug.print("MAIN MID: CURR: {?} PEEK: {?}\n", .{ self.curr.type, self.peek.type });
             if (!self.expect(.Semicolon))
                 return ParserError.MissingSemicolon;
             try self.nextToken();
-            std.debug.print("MAIN END: CURR: {?} PEEK: {?}\n", .{ self.curr.type, self.peek.type });
 
             statements.append(stmt) catch {
                 return ParserError.OutOfMemory;
@@ -102,32 +102,49 @@ pub const Parser = struct {
         return statements;
     }
 
+    // fn parseCreateStatement(self: *Parser) ParserError!*Statement {
+    //     try self.nextToken();
+    //     const stmt = switch (self.curr.type) {
+    //         .Database => try self.parseCreateDatabaseStatement(),
+    //         else => try self.parseCreateDatabaseStatement(),
+    //     };
+    //     return stmt;
+    // }
+    //
+    // fn parseCreateDatabaseStatement(self: *Parser) ParserError!*Statement {
+    //     const name = try self.parseIdentifier();
+    //     if (!self.expect(.Semicolon))
+    //         return ParserError.MissingSemicolon;
+    //     const s = try self.gpa.create(Statement);
+    //     s.* = .{ .CreateDatabase = name };
+    //     return s;
+    // }
+
     // fn parseDatabaseStatement(self: *Parser) ParserError!*Statement {}
 
     fn parseDefineStatement(self: *Parser) ParserError!*Statement {
-        std.debug.print("  DEFINE START: CURR: {?} PEEK: {?}\n", .{ self.curr.type, self.peek.type });
         const name = try self.parseIdentifier();
         if (!self.expect(.Assign))
             return ParserError.MissingAssignmentOperator;
         if (!self.expect(.From)) {
             try self.nextToken();
             const expr = try self.parseExpressionStatement();
-            std.debug.print("  DEFINE EXPR: CURR: {?} PEEK: {?}\n", .{ self.curr.type, self.peek.type });
             // return ParserError.MissingFromClause;
             const s = try self.gpa.create(Statement);
-            s.* = Statement{ .DefineStatement = .{
+            const d = try self.gpa.create(statement.DefineStatement);
+            d.* = .{
                 .name = name,
                 .from = null,
                 .project = null,
                 .renames = null,
                 .select = null,
                 .expression = expr,
-            } };
+            };
+            s.* = Statement{ .DefineStatement = d };
             return s;
         }
         try self.nextToken();
         const from = try self.parseIdentifier();
-        std.debug.print("  DEFINE MID: CURR: {?} PEEK: {?}\n", .{ self.curr.type, self.peek.type });
         if (!self.expect(.Project))
             return ParserError.MissingProjectClause;
         const columns = try self.parseProjectClause();
@@ -138,43 +155,41 @@ pub const Parser = struct {
         }
 
         var select: ?ArrayList(*Expression) = undefined;
-        std.debug.print("  DEFINE MID2: CURR: {?} PEEK: {?}\n", .{ self.curr.type, self.peek.type });
         if (self.expect(.Select)) {
-            std.debug.print("  DEFINE MID PRE SELECT: CURR: {?} PEEK: {?}\n", .{ self.curr.type, self.peek.type });
             select = self.parseSelectStatement() catch |e| return e;
         }
 
-        std.debug.print("  DEFINE END: CURR: {?} PEEK: {?}\n", .{ self.curr.type, self.peek.type });
         const s = try self.gpa.create(Statement);
-        s.* = Statement{ .DefineStatement = .{
+        const d = try self.gpa.create(statement.DefineStatement);
+        d.* = .{
             .name = name,
             .from = from,
             .project = columns,
             .renames = renames,
             .select = select,
             .expression = null,
-        } };
+        };
+        s.* = Statement{ .DefineStatement = d };
         return s;
     }
 
     fn parseRenameClause(self: *Parser) ParserError!ArrayList(*Expression) {
-        std.debug.print("    RENAME START: CURR: {?} PEEK: {?}\n", .{ self.curr.type, self.peek.type });
         try self.nextToken();
         var renames = ArrayList(*Expression).init(self.gpa);
         while (self.peek.type != .Semicolon and self.peek.type != .Select and self.peek.type != .EOF) {
             try self.nextToken();
-            std.debug.print("    CURR: {?} PEEK: {?}\n", .{ self.curr.type, self.peek.type });
             const from = try self.parseIdentifier();
             if (!self.expect(.SingleArrow))
                 return ParserError.MissingSingleArrow;
             try self.nextToken();
             const to = try self.parseIdentifier();
-            const r = try self.gpa.create(Expression);
+            const e = try self.gpa.create(Expression);
+            const r = try self.gpa.create(expression.RenameClause);
+            r.* = .{ .from = from, .to = to };
 
-            r.* = Expression{ .RenameClause = .{ .from = from, .to = to } };
-            try renames.append(r);
+            e.* = Expression{ .RenameClause = r };
+            try renames.append(e);
         }
-        std.debug.print("    RENAME END: CURR: {?} PEEK: {?}\n", .{ self.curr.type, self.peek.type });
         return renames;
     }
 
@@ -197,7 +212,7 @@ pub const Parser = struct {
         if (!self.expect(.Identifier))
             return ParserError.MissingIdentifier;
         const stmt = switch (self.peek.type) {
-            .Assign => try self.parseCreateRelationStatement(),
+            .Assign, .Period => try self.parseCreateRelationStatement(),
             .Plus => try self.parseUnionRelationStatement(),
             else => return ParserError.InvalidCharacter,
         };
@@ -205,7 +220,7 @@ pub const Parser = struct {
     }
 
     fn parseUnionRelationStatement(self: *Parser) ParserError!*Statement {
-        const name = try self.parseIdentifier();
+        const name = try self.parseFullyQualifiedName();
         if (!self.expect(.Plus))
             return ParserError.InvalidCharacter;
         if (!self.expect(.Lbrace))
@@ -213,7 +228,6 @@ pub const Parser = struct {
 
         var rows = ArrayList(*Expression).init(self.gpa);
         while (self.curr.type != .Rbrace and self.curr.type != .EOF) {
-            std.debug.print("  START CURR: {?} PEEK: {?}\n", .{ self.curr.type, self.peek.type });
             if (self.peek.type == .Comment) {
                 try self.nextToken();
                 continue;
@@ -224,27 +238,60 @@ pub const Parser = struct {
             const row = try self.parseRowValues();
             rows.append(row) catch
                 return ParserError.OutOfMemory;
-            std.debug.print("  PRE-BREAK CURR: {?} PEEK: {?}\n", .{ self.curr.type, self.peek.type });
             if (self.curr.type != .Comma and self.peek.type == .Rbrace) {
                 try self.nextToken();
                 break;
             }
-            std.debug.print("  END CURR: {?} PEEK: {?}\n", .{ self.curr.type, self.peek.type });
         }
         if (self.curr.type == .Comma and self.peek.type == .Rbrace)
             try self.nextToken();
+
         const s = try self.gpa.create(Statement);
-        s.* = Statement{ .UnionRelation = .{ .left = name, .rows = rows } };
+        const u = try self.gpa.create(statement.UnionRelation);
+        u.* = .{ .left = name, .rows = rows };
+        s.* = Statement{ .UnionRelation = u };
         return s;
+    }
+
+    fn parseFullyQualifiedName(self: *Parser) ParserError!FullyQualifiedName {
+        var db: ?*Expression = null;
+        var group: ?*Expression = null;
+        var relation: ?*Expression = null;
+        if (self.peek.type == .Period) {
+            const curr = try self.parseIdentifier();
+            try self.nextToken();
+            if (self.expect(.Identifier)) {
+                const next = try self.parseIdentifier();
+                try self.nextToken();
+                if (self.expect(.Identifier)) {
+                    relation = try self.parseIdentifier();
+                    group = next;
+                    db = curr;
+                }
+            } else {
+                relation = try self.parseIdentifier();
+                group = curr;
+            }
+        } else {
+            relation = try self.parseIdentifier();
+        }
+        return .{
+            .db = db,
+            .group = group,
+            .relation = relation,
+        };
     }
 
     fn parseCreateRelationStatement(self: *Parser) ParserError!*Statement {
         if (self.curr.type != .Identifier)
             return ParserError.InvalidRelationName;
-        const relation_name = self.curr.literal;
+
+        const name = try self.parseFullyQualifiedName();
+
+        if (!self.expect(.Assign))
+            return ParserError.MissingAssignmentOperator;
 
         // advance past assign
-        try self.nextToken();
         try self.nextToken();
 
         var columns = ArrayList(*Expression).init(self.gpa);
@@ -252,13 +299,11 @@ pub const Parser = struct {
         var fks = ArrayList(*Expression).init(self.gpa);
         while (self.curr.type != .Semicolon and self.curr.type != .EOF) {
             if (self.curr.type == .PrimaryKey) {
-                std.debug.print("PRIMARY KEY\n", .{});
                 if (!self.expect(.Colon))
                     return ParserError.MissingColon;
                 try self.nextToken();
                 pks = try self.parseRelationPrimaryKeys();
             } else if (self.curr.type == .ForeignKey) {
-                std.debug.print("FOREIGN KEY\n", .{});
                 if (!self.expect(.Colon))
                     return ParserError.MissingColon;
                 if (!self.expect(.Identifier))
@@ -266,12 +311,9 @@ pub const Parser = struct {
                 const fk = try self.parseRelationForeignKey();
                 try fks.append(fk);
             } else {
-                std.debug.print("COLUMN\n", .{});
                 const expr = try self.parseColumnDDLExpression();
                 try columns.append(expr);
             }
-
-            std.debug.print("RELATION LOOP CURR: {?}  PEEK: {?}\n", .{ self.curr.type, self.peek.type });
 
             if (self.peek.type == .Semicolon)
                 break;
@@ -280,14 +322,16 @@ pub const Parser = struct {
             try self.nextToken();
         }
 
-        const rel = try self.gpa.create(Statement);
-        rel.* = .{ .CreateRelation = .{
-            .name = relation_name,
+        const s = try self.gpa.create(Statement);
+        const r = try self.gpa.create(statement.CreateRelation);
+        r.* = .{
+            .name = name,
             .primary_keys = pks,
             .foreign_keys = fks,
             .columns = columns,
-        } };
-        return rel;
+        };
+        s.* = .{ .CreateRelation = r };
+        return s;
     }
 
     fn parseRelationPrimaryKeys(self: *Parser) ParserError!ArrayList(*Expression) {
@@ -315,7 +359,6 @@ pub const Parser = struct {
     }
 
     fn parseRelationForeignKey(self: *Parser) ParserError!*Expression {
-        std.debug.print("FK CURR: {?}  PEEK: {?}\n", .{ self.curr.type, self.peek.type });
         const column = try self.parseIdentifier();
 
         if (!self.expect(.SingleArrow))
@@ -326,10 +369,12 @@ pub const Parser = struct {
         const table = try self.parseIdentifier();
 
         const e = try self.gpa.create(Expression);
-        e.* = .{ .ForeignKey = .{
+        const f = try self.gpa.create(expression.ForeignKey);
+        f.* = .{
             .column = column,
             .table = table,
-        } };
+        };
+        e.* = .{ .ForeignKey = f };
         return e;
     }
 
@@ -364,7 +409,9 @@ pub const Parser = struct {
         //     return ParserError.MissingComma;
         // try self.nextToken();
         const expr = try self.gpa.create(Expression);
-        expr.* = .{ .ColumnDDL = .{ .dtype = dtype, .name = name } };
+        const c = try self.gpa.create(expression.ColumnDDL);
+        c.* = .{ .dtype = dtype, .name = name };
+        expr.* = .{ .ColumnDDL = c };
         return expr;
     }
 
@@ -393,25 +440,23 @@ pub const Parser = struct {
         if (self.expect(.Limit)) {
             limit = self.parseLimitStatement() catch |e| return e;
         }
-        const s = self.gpa.create(Statement) catch {
-            return ParserError.OutOfMemory;
-        };
-        s.* = Statement{ .Return = .{
+        const s = try self.gpa.create(Statement);
+        const r = try self.gpa.create(statement.Return);
+        r.* = .{
             .from = table,
             .project = columns,
             .limit = limit,
             .select = select,
-        } };
+        };
+        s.* = Statement{ .Return = r };
         return s;
     }
 
     fn parseExpression(self: *Parser, precedence: Precedence) ParserError!*Expression {
-        std.debug.print("PREFIX TOK: {?}\n", .{self.curr.type});
         const prefix = Prefix.get(self.curr.type);
         if (prefix == null) {
             return ParserError.PrefixNotFound;
         }
-        std.debug.print("  PREFIX: {?}\n", .{self.curr.type});
         var left: *Expression = switch (prefix.?) {
             Prefix.Identifier => try self.parseIdentifier(),
             Prefix.Number => try self.parseNumber(),
@@ -425,7 +470,6 @@ pub const Parser = struct {
             @intFromEnum(precedence) < @intFromEnum(self.peekPrecedence()))
         {
             const infix = Infix.get(self.peek.type);
-            std.debug.print("    INFIX TOK: {?}\n", .{self.curr.type});
             if (infix == null) return ParserError.InfixNotFound;
             try self.nextToken();
 
@@ -441,10 +485,10 @@ pub const Parser = struct {
 
     fn parseExpressionStatement(self: *Parser) ParserError!*Statement {
         const expr = try self.parseExpression(Precedence.Lowest);
-        const s = self.gpa.create(Statement) catch {
-            return ParserError.OutOfMemory;
-        };
-        s.* = Statement{ .ExpressionStatement = .{ .expression = expr } };
+        const s = try self.gpa.create(Statement);
+        const e = try self.gpa.create(statement.ExpressionStatement);
+        e.* = .{ .expression = expr };
+        s.* = Statement{ .ExpressionStatement = e };
         return s;
     }
 
@@ -457,18 +501,22 @@ pub const Parser = struct {
         const e = self.gpa.create(Expression) catch {
             return ParserError.OutOfMemory;
         };
-        e.* = Expression{ .Infix = .{
+        const i = try self.gpa.create(expression.InfixExpression);
+        i.* = .{
             .left = left,
             .op = op,
             .right = right,
-        } };
+        };
+        e.* = Expression{ .InfixExpression = i };
         return e;
     }
 
     fn parseCallExpression(self: *Parser, func: *Expression) ParserError!*Expression {
         const args = try self.parseExpressionList(.Rparen);
         const e = try self.gpa.create(Expression);
-        e.* = .{ .Call = .{ .func = func, .args = args } };
+        const c = try self.gpa.create(expression.Call);
+        c.* = .{ .func = func, .args = args };
+        e.* = .{ .Call = c };
         return e;
     }
 
@@ -518,10 +566,7 @@ pub const Parser = struct {
         try self.nextToken();
         var clauses = ArrayList(*Expression).init(self.gpa);
         while (self.peek.type != .Semicolon and self.peek.type != .Limit) {
-            std.debug.print("      SELECT START CURR: {?} PEEK: {?}\n", .{ self.curr.type, self.peek.type });
-            std.debug.print("      SELECT MID CURR: {?} PEEK: {?}\n", .{ self.curr.type, self.peek.type });
             const expr = self.parseExpression(Precedence.Lowest) catch |e| return e;
-            std.debug.print("      SELECT POST CURR: {?} PEEK: {?}\n", .{ self.curr.type, self.peek.type });
             try clauses.append(expr);
             if (self.peek.type == .And or self.peek.type == .Or) {
                 try self.nextToken();
@@ -544,13 +589,13 @@ pub const Parser = struct {
     }
 
     fn parseRowValues(self: *Parser) ParserError!*Expression {
-        var rows = ArrayList(*Expression).init(self.gpa);
+        var rows = try self.gpa.create(ArrayList(*Expression));
+        rows.* = ArrayList(*Expression).init(self.gpa);
         while (self.peek.type != .Rbrace and self.peek.type != .EOF) {
             if (self.peek.type == .Comment) {
                 try self.nextToken();
                 continue;
             }
-            std.debug.print("CURR: {?}\n", .{self.curr.type});
             const row = switch (self.curr.type) {
                 .String => try self.parseString(),
                 .Number, .Float => try self.parseNumber(),
@@ -587,7 +632,9 @@ pub const Parser = struct {
         const e = self.gpa.create(Expression) catch {
             return ParserError.OutOfMemory;
         };
-        e.* = Expression{ .String = self.curr.literal };
+        const i = try self.gpa.create(expression.String);
+        i.* = self.curr.literal;
+        e.* = Expression{ .String = i };
         return e;
     }
 
@@ -595,7 +642,9 @@ pub const Parser = struct {
         const e = self.gpa.create(Expression) catch {
             return ParserError.OutOfMemory;
         };
-        e.* = Expression{ .Identifier = self.curr.literal };
+        const i = try self.gpa.create(expression.Identifier);
+        i.* = self.curr.literal;
+        e.* = Expression{ .Identifier = i };
         return e;
     }
 
@@ -616,8 +665,9 @@ pub const Parser = struct {
         }
     }
 
-    fn parseNumberType(self: *Parser) fmt.ParseIntError!NumberUnion {
-        return switch (self.curr.type) {
+    fn parseNumberType(self: *Parser) fmt.ParseIntError!*NumberUnion {
+        const n = self.gpa.create(NumberUnion) catch return fmt.ParseIntError.Overflow;
+        n.* = switch (self.curr.type) {
             .I8 => NumberUnion{ .Int8 = try fmt.parseInt(i8, self.curr.literal, 10) },
             .I16 => NumberUnion{ .Int16 = try fmt.parseInt(i16, self.curr.literal, 10) },
             .I32 => NumberUnion{ .Int32 = try fmt.parseInt(i32, self.curr.literal, 10) },
@@ -632,6 +682,7 @@ pub const Parser = struct {
             .Number => NumberUnion{ .Int64 = try fmt.parseInt(i64, self.curr.literal, 10) },
             else => return fmt.ParseIntError.InvalidCharacter,
         };
+        return n;
         // return switch (num_type) {
         //     u8 => Expression.Number{ .Uint8 = try fmt.parseUnsigned(num_type, self.curr, 10) },
         //     u16 => Expression.Number{ .Uint16 = try fmt.parseUnsigned(num_type, self.curr, 10) },

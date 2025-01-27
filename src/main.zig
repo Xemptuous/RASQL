@@ -44,15 +44,19 @@ pub fn main() !void {
     const parser = try Parser.init(allocator, lexer);
     defer allocator.destroy(parser);
 
+    var timer = try std.time.Timer.start();
     const statements = parser.parse() catch |e| {
         std.debug.print("ERR: {any}", .{e});
         return;
     };
+    const elapsed: f64 = @floatFromInt(timer.read());
+
     defer statements.deinit();
     for (statements.items) |s| {
         s.*.print();
         std.debug.print("\n", .{});
     }
+    std.debug.print("Time elapsed: {d:.3}ms\n", .{elapsed / std.time.ns_per_ms});
 }
 
 fn generateSampleTable(gpa: Allocator) !*Table {
