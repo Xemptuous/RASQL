@@ -6,6 +6,9 @@ const DataType = row.DataType;
 
 const Expression = @import("expression.zig").Expression;
 
+pub var StatementArena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+pub const StatementArenaAllocator = StatementArena.allocator();
+
 pub const StatementType = enum {
     Return,
     CreateSchema,
@@ -39,94 +42,93 @@ pub const FullyQualifiedName = struct {
     }
 };
 
-pub const Return = struct {
-    from: *Expression, // Identifier
-    project: ArrayList(*Expression), // Identifier
-    limit: ?*Expression, // Number
-    select: ?ArrayList(*Expression),
-};
-
-pub const CreateRelation = struct {
-    name: FullyQualifiedName,
-    primary_keys: ArrayList(*Expression),
-    foreign_keys: ArrayList(*Expression),
-    columns: ArrayList(*Expression),
-};
-
-pub const DeleteRelation = []const u8;
-
-pub const UnionRelation = struct {
-    left: FullyQualifiedName,
-    rows: ArrayList(*Expression),
-};
-
-pub const ExpressionStatement = struct {
-    expression: *Expression,
-};
-
-pub const DefineStatement = struct {
-    name: *Expression, // Identifier
-    from: ?*Expression, // Identifier
-    project: ?ArrayList(*Expression),
-    renames: ?ArrayList(*Expression),
-    select: ?ArrayList(*Expression),
-    expression: ?*Statement,
-};
-pub const CreateSchema = struct {
-    name: *Expression, // Identifier
-    relations: ?ArrayList(*Statement), // CreateRelation statements
-};
-
-pub const DeleteSchema = []const u8;
-
-pub const CreateDatabase = *Expression; // Identifier
-pub const DeleteDatabase = *Expression; // Identifier
-pub const DefineDatabase = struct {
-    name: *Expression, // Identifier
-    schema: ArrayList(*Statement),
-};
-
 pub const Statement = union(StatementType) {
-    Return: *const Return,
+    Return: struct {
+        from: *Expression, // Identifier
+        project: ArrayList(*Expression), // Identifier
+        limit: ?*Expression, // Number
+        select: ?ArrayList(*Expression),
+    },
 
     // Schema
-    CreateSchema: *const CreateSchema,
-    DeleteSchema: *const DeleteSchema,
+    CreateSchema: struct {
+        name: []const u8,
+        relations: ?ArrayList(*Statement), // CreateRelation statements
+    },
+    DeleteSchema: []const u8,
 
     // Database
-    CreateDatabase: *const CreateDatabase,
-    DeleteDatabase: *const DeleteDatabase,
-    DefineDatabase: *const DefineDatabase,
+    CreateDatabase: *Expression, // Identifier
+    DeleteDatabase: *Expression, // Identifier
+    DefineDatabase: struct {
+        name: *Expression, // Identifier
+        schema: ArrayList(*Statement),
+    },
 
     // Relation
-    CreateRelation: *const CreateRelation,
-    DeleteRelation: *const DeleteRelation,
-    UnionRelation: *const UnionRelation,
+    CreateRelation: struct {
+        name: FullyQualifiedName,
+        primary_keys: ArrayList(*Expression),
+        foreign_keys: ArrayList(*Expression),
+        columns: ArrayList(*Expression),
+    },
+    DeleteRelation: []const u8,
+    UnionRelation: struct {
+        left: FullyQualifiedName,
+        rows: ArrayList(*Expression),
+    },
 
-    DefineStatement: *const DefineStatement,
-    ExpressionStatement: *const ExpressionStatement,
+    DefineStatement: struct {
+        name: *Expression,
+        from: ?*Expression,
+        project: ?ArrayList(*Expression),
+        renames: ?ArrayList(*Expression),
+        select: ?ArrayList(*Expression),
+        expression: ?*Statement,
+    },
+    ExpressionStatement: struct {
+        expression: *Expression,
+    },
+
+    pub fn new(comptime t: StatementType, data: anytype) !*Statement {
+        const s = try StatementArenaAllocator.create(Statement);
+        s.* = switch (t) {
+            .Return => .{ .Return = data },
+            .CreateSchema => .{ .CreateSchema = data },
+            .DeleteSchema => .{ .DeleteSchema = data },
+            .CreateDatabase => .{ .CreateDatabase = data },
+            .DeleteDatabase => .{ .DeleteDatabase = data },
+            .DefineDatabase => .{ .DefineDatabase = data },
+            .CreateRelation => .{ .CreateRelation = data },
+            .DeleteRelation => .{ .DeleteRelation = data },
+            .UnionRelation => .{ .UnionRelation = data },
+            .DefineStatement => .{ .DefineStatement = data },
+            .ExpressionStatement => .{ .ExpressionStatement = data },
+        };
+        return s;
+    }
 
     pub fn print(self: Statement) void {
         switch (self) {
             .Return => |s| {
                 std.debug.print("Statement.Return:\n", .{});
                 std.debug.print("  From: ", .{});
-                s.*.from.print();
+                s.from.print();
                 std.debug.print("\n", .{});
                 std.debug.print("  Project:\n", .{});
-                for (s.*.project.items) |i| {
+                for (s.project.items) |i| {
                     std.debug.print("    ", .{});
                     i.print();
                     std.debug.print("\n", .{});
                 }
-                if (s.*.limit != null) {
+                if (s.limit != null) {
                     std.debug.print("  Limit: ", .{});
-                    s.*.limit.?.print();
+                    s.limit.?.print();
                     std.debug.print("\n", .{});
                 }
                 std.debug.print("  Select:\n", .{});
-                if (s.*.select != null) {
-                    for (s.*.select.?.items) |i| {
+                if (s.select != null) {
+                    for (s.select.?.items) |i| {
                         std.debug.print("    ", .{});
                         i.print();
                         std.debug.print("\n", .{});
@@ -136,24 +138,24 @@ pub const Statement = union(StatementType) {
             .CreateRelation => |s| {
                 std.debug.print("Statement.CreateRelation:\n", .{});
                 std.debug.print("  Name: ", .{});
-                s.*.name.print();
+                s.name.print();
                 std.debug.print("\n  Columns:\n", .{});
-                for (s.*.columns.items) |i| {
+                for (s.columns.items) |i| {
                     std.debug.print("    ", .{});
                     i.print();
                     std.debug.print("\n", .{});
                 }
-                if (s.*.primary_keys.items.len != 0) {
+                if (s.primary_keys.items.len != 0) {
                     std.debug.print("  Primary Key: ( ", .{});
-                    for (s.*.primary_keys.items) |i| {
+                    for (s.primary_keys.items) |i| {
                         i.print();
                         std.debug.print(", ", .{});
                     }
                     std.debug.print(" )\n", .{});
                 }
-                if (s.*.foreign_keys.items.len != 0) {
+                if (s.foreign_keys.items.len != 0) {
                     std.debug.print("  Foreign Keys:\n", .{});
-                    for (s.*.foreign_keys.items) |i| {
+                    for (s.foreign_keys.items) |i| {
                         std.debug.print("    ", .{});
                         i.print();
                         std.debug.print(",\n", .{});

@@ -7,8 +7,12 @@ const PF_FileManager = @import("page/manager.zig").FileManager;
 const PF_FileHandle = @import("page/file.zig").FileHandle;
 const PF_Page = @import("page/page.zig").Page;
 
-const Statement = @import("parser/statement.zig").Statement;
-const Expression = @import("parser/expression.zig").Expression;
+const statement = @import("parser/statement.zig");
+const Statement = statement.Statement;
+
+const expression = @import("parser/expression.zig");
+const Expression = expression.Expression;
+
 const Header = @import("page/header.zig").Header;
 const HeaderFileType = @import("page/header.zig").FileType;
 
@@ -28,12 +32,14 @@ pub fn main() !void {
     defer arena.deinit();
     const allocator = arena.allocator();
 
+    defer statement.StatementArena.deinit();
+    defer expression.ExpressionArena.deinit();
+
     const f = try std.fs.cwd().openFile("input.txt", .{});
-    const input = try f.readToEndAlloc(allocator, 10000);
+    var input = try f.readToEndAlloc(allocator, 10000);
 
-    const lexer = try Lexer.init(input, allocator);
+    const lexer = try Lexer.init(&input, &allocator);
     defer allocator.destroy(lexer);
-
     // var tok: token.Token = undefined;
     // while (true) {
     //     tok = try lexer.nextToken();
@@ -41,7 +47,7 @@ pub fn main() !void {
     //     tok.print();
     // }
 
-    const parser = try Parser.init(allocator, lexer);
+    const parser = try Parser.init(&allocator, lexer);
     defer allocator.destroy(parser);
 
     var timer = try std.time.Timer.start();
@@ -56,6 +62,13 @@ pub fn main() !void {
         s.*.print();
         std.debug.print("\n", .{});
     }
+
+    std.debug.print("Expression: {d}\n", .{@sizeOf(Expression)});
+    std.debug.print("Statement: {d}\n", .{@sizeOf(Statement)});
+    std.debug.print("ArrayList: {d}\n", .{@sizeOf(std.ArrayList(*Expression))});
+    std.debug.print("ArrayListUnmanaged: {d}\n", .{@sizeOf(std.ArrayListUnmanaged(*Expression))});
+    std.debug.print("ArrayListAligned: {d}\n", .{@sizeOf(std.ArrayListAligned(*Expression, null))});
+
     std.debug.print("Time elapsed: {d:.3}ms\n", .{elapsed / std.time.ns_per_ms});
 }
 

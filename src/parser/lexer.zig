@@ -15,20 +15,18 @@ fn numberPair(str: []const u8, ttype: TokenType) NumberPair {
 }
 
 pub const Lexer = struct {
-    input: []const u8,
+    input: *[]const u8,
     curr: usize,
     peek_pos: usize,
     char: ?u8,
-    gpa: Allocator,
 
-    pub fn init(input: []const u8, gpa: Allocator) !*Lexer {
+    pub fn init(input: *[]const u8, gpa: *const Allocator) !*Lexer {
         const lexer = try gpa.create(Lexer);
         lexer.* = .{
             .input = input,
             .curr = 0,
             .peek_pos = 0,
-            .char = input[0],
-            .gpa = gpa,
+            .char = input.*[0],
         };
         lexer.read();
         return lexer;
@@ -41,10 +39,10 @@ pub const Lexer = struct {
         if (self.char == null)
             return Token.init("", TokenType.EOF);
 
-        const ch = self.input[self.curr..self.peek_pos];
+        const ch = self.input.*[self.curr..self.peek_pos];
         var pair: []const u8 = "";
         if (self.peek_pos < self.input.len) {
-            pair = self.input[self.curr .. self.peek_pos + 1];
+            pair = self.input.*[self.curr .. self.peek_pos + 1];
         }
 
         var read_next = true;
@@ -172,7 +170,7 @@ pub const Lexer = struct {
         }
 
         const diff = self.curr - pos;
-        return self.input[pos .. pos + diff];
+        return self.input.*[pos .. pos + diff];
     }
 
     fn readComment(self: *Lexer) []const u8 {
@@ -183,7 +181,7 @@ pub const Lexer = struct {
         }
 
         const diff = self.curr - pos;
-        return self.input[pos .. pos + diff];
+        return self.input.*[pos .. pos + diff];
     }
 
     fn readIdentifier(self: *Lexer) []const u8 {
@@ -193,7 +191,7 @@ pub const Lexer = struct {
             self.read();
 
         const diff = self.curr - pos;
-        return self.input[pos .. pos + diff];
+        return self.input.*[pos .. pos + diff];
     }
 
     fn readNumber(self: *Lexer) NumberPair {
@@ -209,7 +207,7 @@ pub const Lexer = struct {
             self.read();
         }
         const diff = self.curr - pos;
-        const str = self.input[pos .. pos + diff];
+        const str = self.input.*[pos .. pos + diff];
         if (is_float)
             return .{ .str = str, .ttype = .Float };
         return .{ .str = str, .ttype = .Number };
@@ -217,7 +215,7 @@ pub const Lexer = struct {
 
     fn peek(self: *Lexer) ?u8 {
         if (self.peek_pos <= self.input.len)
-            return self.input[self.peek_pos];
+            return self.input.*[self.peek_pos];
         return null;
     }
 
@@ -225,7 +223,7 @@ pub const Lexer = struct {
         self.curr = self.peek_pos;
         self.peek_pos = self.curr + 1;
         if (self.peek_pos <= self.input.len)
-            self.char = self.input[self.curr]
+            self.char = self.input.*[self.curr]
         else
             self.char = null;
     }
