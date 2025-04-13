@@ -81,7 +81,7 @@ RELATION book_authors + {
 NewBooks :=
     F: book
     P: *
-    S: publication_year >= 2000
+    S: publication_year >= 2020
 ;
 
 UK_Authors :=
@@ -89,10 +89,11 @@ UK_Authors :=
     P: author_id
     S: country = 'UK'
 ;
-US_Authors :=
+US_Authors_Old :=
     F: author
     P: author_id
     S: country = 'USA'
+    && publication_year < 2020
 ;
 
 AuthorBooks := book_authors >< author >< book;

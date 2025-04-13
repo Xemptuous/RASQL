@@ -531,6 +531,7 @@ pub const Parser = struct {
             const expr = self.parseExpression(Precedence.Lowest) catch |e| return e;
             try clauses.append(expr);
             if (self.peek.type == .And or self.peek.type == .Or) {
+                // TODO: handle boolean infixes using && and ||
                 try self.nextToken();
                 try self.nextToken();
             }
