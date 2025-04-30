@@ -9,7 +9,20 @@ in duct-tape fashion.
 
 Plus I like learning new languages, and this was a good opportunity to do some more Zig.
 
-Below is the syntax spec I have been aiming for:
+### Current Accomplishments
+
+I was *finally* able to get the pagefile system working to a moderate degree, but it still needs more work.
+
+I have gotten the majority of the lexer where I want it, with some slight work needed on the parser. After that,
+I need to decide what sort of parsing system to settle with, and then move on to evaluating. This is where I
+need more design choices, and where I will likely have to revisit some of the language choices I have already made.
+
+### Future work
+
+I want to get this to a proper working state with a REPL that can create databases, schemas, and tables, do
+user creation and management, and run queries, just as you'd expect from any normal DBMS. 
+
+---
 
 ## Relational Algebra Overview
 
