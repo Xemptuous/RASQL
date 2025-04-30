@@ -1,5 +1,16 @@
 # RASQL: Relation Algebra SQL
 
+An idea originating from my research into relational algrebra and how it has been lost
+to SQL and its dominance. I was originally curious as to what we might be losing out on,
+and I also saw a lack of evolution in the traditional syntax used to query databases, so 
+I sought to develop something influenced by pure functional language paradigms in the sense
+of requiring proper thought and care in implementations, rather than throwing things together
+in duct-tape fashion.
+
+Plus I like learning new languages, and this was a good opportunity to do some more Zig.
+
+Below is the syntax spec I have been aiming for:
+
 ## Relational Algebra Overview
 
 One of the values of Relational Algebra-compliant databases is that in set theory, we cannot have
