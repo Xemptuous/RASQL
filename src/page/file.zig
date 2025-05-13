@@ -6,16 +6,6 @@ const Page = @import("page.zig").Page;
 const PAGE_SIZE = @import("page.zig").PAGE_SIZE;
 const DB_FS_DIR = @import("manager.zig").DB_FS_DIR;
 
-// pub const FileType = enum {
-//     Data,
-//     Index,
-// };
-//
-// pub const Header = struct {
-//     type: FileType,
-//     column_count: usize,
-// };
-
 pub const FileHandle = struct {
     page_number: usize,
     file: File,
@@ -29,9 +19,8 @@ pub const FileHandle = struct {
         };
     }
 
-    pub fn deinit(self: FileHandle) !void {
+    pub fn close(self: FileHandle) void {
         self.file.close();
-        // self.dirty_pages.deinit();
     }
 
     pub fn getFirstPage(self: FileHandle, page: *Page) !void {
@@ -60,24 +49,27 @@ pub const FileHandle = struct {
         const cur_page = page.number;
         if (page.number > 0) {
             page.number -= 1;
+            self.file.pread(page.data, page.number * PAGE_SIZE) catch {
+                page.number = cur_page;
+                return;
+            };
         }
-        _ = try self.file.pread(page.data, page.number * PAGE_SIZE) catch {
-            page.number = cur_page;
-        };
-        page.number = cur_page;
     }
 
     pub fn allocatePage(self: FileHandle, page: *Page) !void {
-        const size = try self.file.getEndPos();
-        if (size / PAGE_SIZE <= PAGE_SIZE) return;
+        const end = try self.file.getEndPos();
+        const new_page_num = end / PAGE_SIZE;
+
+        page.number = new_page_num;
+        var zero_buf = [_]u8{0} ** PAGE_SIZE;
+
         try self.file.seekTo(page.number * PAGE_SIZE);
-        var buf: [PAGE_SIZE]u8 = .{0} ** PAGE_SIZE;
-        _ = try self.file.write(&buf);
+        try self.file.writeAll(&zero_buf);
     }
 
     pub fn writePage(self: FileHandle, page: *Page) !void {
         try self.file.seekTo(page.number * PAGE_SIZE);
-        _ = try self.file.write(&page.data);
+        try self.file.writeAll(&page.data);
     }
 
     pub fn advanceAndWritePage(self: FileHandle, page: *Page, pdata: *usize) !void {
@@ -85,14 +77,4 @@ pub const FileHandle = struct {
         page.advancePage();
         pdata.* = 0;
     }
-
-    // pub fn markDirty(self: FileHandle, page_num: usize) !void {
-    //     try self.dirty_pages.append(page_num);
-    // }
-
-    // pub fn disposePage(self: FileHandle, page_num: usize) !void {
-    //     const cur_page = page.number;
-    //     const tmp_file = try std.fs.createFileAbsolute("/tmp/rasql_out.txt", .{});
-    //     const tmp_reader = tmp_file.reader();
-    // }
 };

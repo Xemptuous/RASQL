@@ -8,6 +8,9 @@ const DataType = @import("row.zig").DataType;
 const PAGE_SIZE = @import("../page/page.zig").PAGE_SIZE;
 const Page = @import("../page/page.zig").Page;
 const FileHandle = @import("../page/file.zig").FileHandle;
+const FileManager = @import("../page/manager.zig").FileManager;
+const PageWriter = @import("../page/writer.zig").PageWriter;
+const PageReader = @import("../page/reader.zig").PageReader;
 
 pub const Table = struct {
     columns: ArrayList(Column),
@@ -26,90 +29,99 @@ pub const Table = struct {
 
     pub fn deinit(self: *Table) void {
         self.columns.deinit();
-        // for (self.rows.items) |row| {
-        //     switch (row) {
-        //         DataType.String => |s| self.gpa.free(s),
-        //         else => {},
-        //     }
-        // }
         self.rows.deinit();
         self.gpa.destroy(self);
     }
 
-    pub fn serialize(self: *Table, file: *FileHandle, page: *Page, pdata: *usize) !void {
-        // number of columns
-        _ = try self.serializeNumberOfColumns(file, page, pdata);
+    pub fn serialize(self: *Table, writer: *PageWriter) !void {
+        try writer.writeU32(@intCast(self.columns.items.len));
 
-        for (self.columns.items) |column| {
-            try column.serialize(file, page, pdata);
+        for (self.columns.items) |column|
+            try column.serialize(writer);
+
+        for (self.rows.items) |row|
+            try row.serialize(writer);
+    }
+
+    pub fn deserialize(reader: *PageReader, allocator: Allocator) !Table {
+        var table = Table{
+            .gpa = allocator,
+            .columns = ArrayList(Column).init(allocator),
+            .rows = ArrayList(RowValue).init(allocator),
+        };
+
+        const column_count = try reader.readU32();
+        std.debug.print("Col Count: {d}\n", .{column_count});
+        try table.columns.ensureTotalCapacity(column_count);
+        for (0..column_count) |_| {
+            const column = try Column.deserialize(reader, allocator);
+            try table.columns.append(column);
+        }
+        for (table.columns.items) |col| {
+            std.debug.print("Column: {any}\n", .{col});
         }
 
-        for (self.rows.items) |row| {
-            try row.serialize(file, page, pdata);
+        while (reader.position() < PAGE_SIZE) {
+            const row = try RowValue.deserialize(reader, allocator);
+            try table.rows.append(row);
         }
+
+        return table;
     }
 
-    // pub fn serialize(self: *Table, buffer: *ArrayList(u8), pdata: *usize, gpa: Allocator) !void {
-    //     // number of columns
-    //     _ = try self.serializeNumberOfColumns(buffer, pdata);
-    //
-    //     for (self.columns.items) |column| {
-    //         try column.serialize(buffer, pdata, gpa);
-    //     }
-    //
-    //     for (self.rows.items) |row| {
-    //         try row.serialize(buffer, pdata, gpa);
-    //     }
-    // }
+    pub fn writeToFile(table: *Table, gpa: Allocator) !void {
+        var file = try FileManager.openFile(gpa, "people");
+        defer file.close();
+        std.debug.print("file: {any}\n", .{file});
+        // defer PF_FileManager.closeFile(&file);
 
-    pub fn serializeNumberOfColumns(self: *Table, file: *FileHandle, page: *Page, pdata: *usize) !u32 {
-        const len: u32 = @intCast(self.columns.items.len);
-        var lenbuf: [4]u8 = .{0} ** 4;
-        lenbuf = @bitCast(len);
-        if (pdata.* + 4 > PAGE_SIZE) try file.advanceAndWritePage(page, pdata);
-        @memcpy(page.data[pdata.* .. pdata.* + 4], &lenbuf);
-        // try buffer.appendSlice(&lenbuf);
-        pdata.* += 4;
-        return len;
+        var page = Page.init();
+        var writer = PageWriter.init(&file, &page);
+        try table.serialize(&writer);
     }
 
-    // pub fn serializeNumberOfColumns(self: *Table, buffer: *ArrayList(u8), pdata: *usize) !u32 {
-    //     const len: u32 = @intCast(self.columns.items.len);
-    //     var lenbuf: [4]u8 = .{0} ** 4;
-    //     lenbuf = @bitCast(len);
-    //     try buffer.appendSlice(&lenbuf);
-    //     pdata.* += 4;
-    //     return len;
-    // }
-
-    pub fn deserializeNumberOfColumns(buffer: []u8, pdata: *usize) !usize {
-        const ulen: u32 = std.mem.bytesToValue(u32, buffer[pdata.* .. pdata.* + 4]);
-        const col_len: usize = @as(usize, ulen);
-        pdata.* += 4;
-        return col_len;
+    pub fn readFromFile(gpa: Allocator) !Table {
+        var file = try FileManager.openFile(gpa, "people");
+        defer file.close();
+        // defer PF_FileManager.closeFile(&file);
+        var page = Page.init();
+        try file.getFirstPage(&page);
+        var reader = PageReader.init(&file, &page);
+        const table = try Table.deserialize(&reader, gpa);
+        std.debug.print("Table: {any}", .{table});
+        return table;
     }
-
-    pub fn deserializeColumns(self: *Table, buffer: []u8, pdata: *usize) !void {
-        const ulen: u32 = std.mem.bytesToValue(u32, buffer[pdata.* .. pdata.* + 4]);
-        const col_len: usize = @as(usize, ulen);
-        pdata.* += 4;
-
-        for (0..col_len) |_| {
-            const col = try Column.deserialize(buffer, pdata);
-            try self.columns.append(col);
-        }
-    }
-
-    // pub fn deserializeRows(self: Table, buffer: *ArrayList(u8)) !void {
-    //     for (self.rows.items) |row| {
-    //         try row.deserialize(buffer, pdata);
-    //     }
-    // }
-
-    // pub fn deserialize(self: Table, buffer: *ArrayList(u8), pdata: *usize, gpa: Allocator) !void {
-    //     // number of columns
-    //     const ulen: u32 = std.mem.bytesToValue(u32, buffer[pdata.* .. pdata.* + 4]);
-    //     const len: usize = @as(usize, ulen);
-    //     pdata.* += 4;
-    // }
 };
+
+pub fn generateSampleTable(gpa: Allocator) !*Table {
+    var columns = try std.ArrayList(Column).initCapacity(gpa, 3);
+    try columns.appendSlice(&[3]Column{
+        Column{ .name = "id", .type = .Int32, .nullable = false },
+        Column{ .name = "fname", .type = .String, .nullable = false },
+        Column{ .name = "is_active", .type = .Boolean, .nullable = false },
+    });
+
+    const file = try FileManager.openFile(gpa, "sample_names.txt");
+    defer file.file.close();
+
+    var rows = std.ArrayList(RowValue).init(gpa);
+
+    var buf_reader = std.io.bufferedReader(file.file.reader());
+    var in_stream = buf_reader.reader();
+    const rand = std.crypto.random;
+    var id: u32 = 0;
+    while (try in_stream.readUntilDelimiterOrEofAlloc(gpa, '\n', 64)) |line| {
+        try rows.appendSlice(&[_]RowValue{
+            .{ .Uint32 = id },
+            .{ .String = line },
+            .{ .Boolean = rand.boolean() },
+        });
+        id += 1;
+    }
+
+    var table = try Table.init(gpa);
+    table.columns = columns;
+    table.rows = rows;
+
+    return table;
+}

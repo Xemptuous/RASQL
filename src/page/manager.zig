@@ -4,7 +4,9 @@ const ArrayList = std.ArrayList;
 const FileHandle = @import("file.zig").FileHandle;
 const PAGE_SIZE = @import("page.zig").PAGE_SIZE;
 
-const DB_FS_DIR = "/home/xempt/Documents/Code/Zig/zigdb/src/dbs/";
+const DB_FS_DIR = "/home/xempt/Git/Personal/rasql/src/dbs/";
+
+const FileOpenFlags = fs.File.OpenFlags{ .mode = fs.File.OpenMode.read_write };
 
 pub const FileManager = struct {
     pub fn createFile(filename: []const u8) !void {
@@ -21,7 +23,12 @@ pub const FileManager = struct {
     pub fn openFile(gpa: std.mem.Allocator, filename: []const u8) !FileHandle {
         const dir = try fs.openDirAbsolute(DB_FS_DIR, .{});
 
-        const file = try dir.openFile(filename, fs.File.OpenFlags{ .mode = fs.File.OpenMode.read_write });
+        const file = dir.openFile(filename, FileOpenFlags) catch {
+            try FileManager.createFile(filename);
+            const file = try dir.openFile(filename, FileOpenFlags);
+            return FileHandle.init(gpa, file);
+        };
+        std.debug.print("File: {any}\n", .{file});
         return FileHandle.init(gpa, file);
     }
 
