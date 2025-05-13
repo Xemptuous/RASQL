@@ -1,5 +1,4 @@
 const std = @import("std");
-const ArrayList = std.ArrayList;
 const row = @import("../table/row.zig");
 const RowValue = row.RowValue;
 const DataType = row.DataType;
@@ -45,15 +44,15 @@ pub const FullyQualifiedName = struct {
 pub const Statement = union(StatementType) {
     Return: struct {
         from: *Expression, // Identifier
-        project: ArrayList(*Expression), // Identifier
+        project: []Expression, // Identifier
         limit: ?*Expression, // Number
-        select: ?ArrayList(*Expression),
+        select: ?[]Expression,
     },
 
     // Schema
     CreateSchema: struct {
         name: []const u8,
-        relations: ?ArrayList(*Statement), // CreateRelation statements
+        relations: ?[]Statement, // CreateRelation statements
     },
     DeleteSchema: []const u8,
 
@@ -62,28 +61,28 @@ pub const Statement = union(StatementType) {
     DeleteDatabase: *Expression, // Identifier
     DefineDatabase: struct {
         name: *Expression, // Identifier
-        schema: ArrayList(*Statement),
+        schema: []Statement,
     },
 
     // Relation
     CreateRelation: struct {
         name: FullyQualifiedName,
-        primary_keys: ArrayList(*Expression),
-        foreign_keys: ArrayList(*Expression),
-        columns: ArrayList(*Expression),
+        primary_keys: []Expression,
+        foreign_keys: []Expression,
+        columns: []Expression,
     },
     DeleteRelation: []const u8,
     UnionRelation: struct {
         left: FullyQualifiedName,
-        rows: ArrayList(*Expression),
+        rows: []Expression,
     },
 
     DefineStatement: struct {
         name: *Expression,
         from: ?*Expression,
-        project: ?ArrayList(*Expression),
-        renames: ?ArrayList(*Expression),
-        select: ?ArrayList(*Expression),
+        project: ?[]Expression,
+        renames: ?[]Expression,
+        select: ?[]Expression,
         expression: ?*Statement,
     },
     ExpressionStatement: struct {
@@ -116,7 +115,7 @@ pub const Statement = union(StatementType) {
                 s.from.print();
                 std.debug.print("\n", .{});
                 std.debug.print("  Project:\n", .{});
-                for (s.project.items) |i| {
+                for (s.project) |i| {
                     std.debug.print("    ", .{});
                     i.print();
                     std.debug.print("\n", .{});
@@ -128,7 +127,7 @@ pub const Statement = union(StatementType) {
                 }
                 std.debug.print("  Select:\n", .{});
                 if (s.select != null) {
-                    for (s.select.?.items) |i| {
+                    for (s.select.?) |i| {
                         std.debug.print("    ", .{});
                         i.print();
                         std.debug.print("\n", .{});
@@ -140,22 +139,22 @@ pub const Statement = union(StatementType) {
                 std.debug.print("  Name: ", .{});
                 s.name.print();
                 std.debug.print("\n  Columns:\n", .{});
-                for (s.columns.items) |i| {
+                for (s.columns) |i| {
                     std.debug.print("    ", .{});
                     i.print();
                     std.debug.print("\n", .{});
                 }
-                if (s.primary_keys.items.len != 0) {
+                if (s.primary_keys.len != 0) {
                     std.debug.print("  Primary Key: ( ", .{});
-                    for (s.primary_keys.items) |i| {
+                    for (s.primary_keys) |i| {
                         i.print();
                         std.debug.print(", ", .{});
                     }
                     std.debug.print(" )\n", .{});
                 }
-                if (s.foreign_keys.items.len != 0) {
+                if (s.foreign_keys.len != 0) {
                     std.debug.print("  Foreign Keys:\n", .{});
-                    for (s.foreign_keys.items) |i| {
+                    for (s.foreign_keys) |i| {
                         std.debug.print("    ", .{});
                         i.print();
                         std.debug.print(",\n", .{});
@@ -172,7 +171,7 @@ pub const Statement = union(StatementType) {
                 std.debug.print("  Left: ", .{});
                 u.left.print();
                 std.debug.print("\n  Rows:\n", .{});
-                for (u.rows.items) |r| {
+                for (u.rows) |r| {
                     std.debug.print("    ", .{});
                     r.print();
                     std.debug.print("\n", .{});
@@ -188,14 +187,14 @@ pub const Statement = union(StatementType) {
                 }
                 if (d.project != null) {
                     std.debug.print("\n  Project: ", .{});
-                    for (d.project.?.items) |p| {
+                    for (d.project.?) |p| {
                         p.print();
                         std.debug.print(", ", .{});
                     }
                 }
                 if (d.renames != null) {
                     std.debug.print("\n  Rename:\n", .{});
-                    for (d.renames.?.items) |r| {
+                    for (d.renames.?) |r| {
                         std.debug.print("    ", .{});
                         r.print();
                         std.debug.print(", ", .{});
@@ -203,7 +202,7 @@ pub const Statement = union(StatementType) {
                 }
                 if (d.select != null) {
                     std.debug.print("\n  Select:\n", .{});
-                    for (d.select.?.items) |i| {
+                    for (d.select.?) |i| {
                         std.debug.print("    ", .{});
                         i.print();
                         std.debug.print("\n", .{});

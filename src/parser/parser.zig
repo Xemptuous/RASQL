@@ -64,8 +64,8 @@ pub const Parser = struct {
             .peek = undefined,
             .gpa = gpa,
         };
-        try parser.nextToken();
-        try parser.nextToken();
+        parser.nextToken();
+        parser.nextToken();
         return parser;
     }
 
@@ -75,7 +75,7 @@ pub const Parser = struct {
             var stmt: *Statement = undefined;
 
             if (self.curr.type == .Comment) {
-                try self.nextToken();
+                self.nextToken();
                 continue;
             }
 
@@ -91,7 +91,7 @@ pub const Parser = struct {
             };
             if (!self.expect(.Semicolon))
                 return ParserError.MissingSemicolon;
-            try self.nextToken();
+            self.nextToken();
 
             statements.append(stmt) catch {
                 return ParserError.OutOfMemory;
@@ -101,7 +101,7 @@ pub const Parser = struct {
     }
 
     fn parseCreateStatement(self: *Parser) ParserError!*Statement {
-        try self.nextToken();
+        self.nextToken();
         const stmt = switch (self.curr.type) {
             .Database => try self.parseCreateDatabaseStatement(),
             else => try self.parseCreateDatabaseStatement(),
@@ -123,7 +123,7 @@ pub const Parser = struct {
         if (!self.expect(.Assign))
             return ParserError.MissingAssignmentOperator;
         if (!self.expect(.From)) {
-            try self.nextToken();
+            self.nextToken();
             const expr = try self.parseExpressionStatement();
             // return ParserError.MissingFromClause;
             return Statement.new(.DefineStatement, .{
@@ -135,18 +135,18 @@ pub const Parser = struct {
                 .expression = expr,
             });
         }
-        try self.nextToken();
+        self.nextToken();
         const from = try self.parseIdentifier();
         if (!self.expect(.Project))
             return ParserError.MissingProjectClause;
-        const columns = try self.parseProjectClause();
-        // try self.nextToken();
-        var renames: ?ArrayList(*Expression) = null;
+        var columns = try self.parseProjectClause();
+        // self.nextToken();
+        var renames: ?ArrayList(Expression) = null;
         if (self.peek.type == .Rename) {
             renames = try self.parseRenameClause();
         }
 
-        var select: ?ArrayList(*Expression) = undefined;
+        var select: ?ArrayList(Expression) = null;
         if (self.expect(.Select)) {
             select = self.parseSelectStatement() catch |e| return e;
         }
@@ -154,38 +154,38 @@ pub const Parser = struct {
         return Statement.new(.DefineStatement, .{
             .name = name,
             .from = from,
-            .project = columns,
-            .renames = renames,
-            .select = select,
+            .project = try columns.toOwnedSlice(),
+            .renames = if (renames != null) try renames.?.toOwnedSlice() else null,
+            .select = if (select != null) try select.?.toOwnedSlice() else null,
             .expression = null,
         });
     }
 
-    fn parseRenameClause(self: *Parser) ParserError!ArrayList(*Expression) {
-        try self.nextToken();
-        var renames = ArrayList(*Expression).init(self.gpa.*);
+    fn parseRenameClause(self: *Parser) ParserError!ArrayList(Expression) {
+        self.nextToken();
+        var renames = ArrayList(Expression).init(self.gpa.*);
         while (self.peek.type != .Semicolon and self.peek.type != .Select and self.peek.type != .EOF) {
-            try self.nextToken();
+            self.nextToken();
             const from = try self.parseIdentifier();
             if (!self.expect(.SingleArrow))
                 return ParserError.MissingSingleArrow;
-            try self.nextToken();
+            self.nextToken();
             const to = try self.parseIdentifier();
             const r = try Expression.new(.RenameClause, .{
                 .from = from,
                 .to = to,
             });
-            try renames.append(r);
+            try renames.append(r.*);
         }
         return renames;
     }
 
-    fn parseProjectClause(self: *Parser) ParserError!ArrayList(*Expression) {
-        var columns = ArrayList(*Expression).init(self.gpa.*);
+    fn parseProjectClause(self: *Parser) ParserError!ArrayList(Expression) {
+        var columns = ArrayList(Expression).init(self.gpa.*);
         while (self.peek.type != .Rename and self.peek.type != .Semicolon and self.peek.type != .EOF) {
-            try self.nextToken();
+            self.nextToken();
             const name = try self.parseIdentifier();
-            try columns.append(name);
+            try columns.append(name.*);
             if (self.peek.type == .Rename or self.peek.type == .Select or self.peek.type == .Semicolon) {
                 break;
             }
@@ -213,28 +213,28 @@ pub const Parser = struct {
         if (!self.expect(.Lbrace))
             return ParserError.MissingLbrace;
 
-        var rows = ArrayList(*Expression).init(self.gpa.*);
+        var rows = ArrayList(Expression).init(self.gpa.*);
         while (self.curr.type != .Rbrace and self.curr.type != .EOF) {
             if (self.peek.type == .Comment) {
-                try self.nextToken();
+                self.nextToken();
                 continue;
             }
             if (!self.expect(.Lparen))
                 return ParserError.MissingLparen;
-            try self.nextToken();
+            self.nextToken();
             const row = try self.parseRowValues();
-            rows.append(row) catch
+            rows.append(row.*) catch
                 return ParserError.OutOfMemory;
             if (self.curr.type != .Comma and self.peek.type == .Rbrace) {
-                try self.nextToken();
+                self.nextToken();
                 break;
             }
         }
         if (self.curr.type == .Comma and self.peek.type == .Rbrace)
-            try self.nextToken();
+            self.nextToken();
         return Statement.new(.UnionRelation, .{
             .left = name,
-            .rows = rows,
+            .rows = try rows.toOwnedSlice(),
         });
     }
 
@@ -244,10 +244,10 @@ pub const Parser = struct {
         var relation: ?*Expression = null;
         if (self.peek.type == .Period) {
             const curr = try self.parseIdentifier();
-            try self.nextToken();
+            self.nextToken();
             if (self.expect(.Identifier)) {
                 const next = try self.parseIdentifier();
-                try self.nextToken();
+                self.nextToken();
                 if (self.expect(.Identifier)) {
                     relation = try self.parseIdentifier();
                     group = next;
@@ -277,16 +277,17 @@ pub const Parser = struct {
             return ParserError.MissingAssignmentOperator;
 
         // advance past assign
-        try self.nextToken();
+        self.nextToken();
 
-        var columns = ArrayList(*Expression).init(self.gpa.*);
-        var pks = ArrayList(*Expression).init(self.gpa.*);
-        var fks = ArrayList(*Expression).init(self.gpa.*);
+        var columns = ArrayList(Expression).init(self.gpa.*);
+        // var columns = ArrayList(*Expression).init(self.gpa.*);
+        var pks = ArrayList(Expression).init(self.gpa.*);
+        var fks = ArrayList(Expression).init(self.gpa.*);
         while (self.curr.type != .Semicolon and self.curr.type != .EOF) {
             if (self.curr.type == .PrimaryKey) {
                 if (!self.expect(.Colon))
                     return ParserError.MissingColon;
-                try self.nextToken();
+                self.nextToken();
                 pks = try self.parseRelationPrimaryKeys();
             } else if (self.curr.type == .ForeignKey) {
                 if (!self.expect(.Colon))
@@ -294,7 +295,7 @@ pub const Parser = struct {
                 if (!self.expect(.Identifier))
                     return ParserError.MissingIdentifier;
                 const fk = try self.parseRelationForeignKey();
-                try fks.append(fk);
+                try fks.append(fk.*);
             } else {
                 const expr = try self.parseColumnDDLExpression();
                 try columns.append(expr);
@@ -304,35 +305,35 @@ pub const Parser = struct {
                 break;
             if (!self.expect(.Comma))
                 return ParserError.MissingComma;
-            try self.nextToken();
+            self.nextToken();
         }
 
         return Statement.new(.CreateRelation, .{
             .name = name,
-            .primary_keys = pks,
-            .foreign_keys = fks,
-            .columns = columns,
+            .primary_keys = try pks.toOwnedSlice(),
+            .foreign_keys = try fks.toOwnedSlice(),
+            .columns = try columns.toOwnedSlice(),
         });
     }
 
-    fn parseRelationPrimaryKeys(self: *Parser) ParserError!ArrayList(*Expression) {
-        var pks = ArrayList(*Expression).init(self.gpa.*);
+    fn parseRelationPrimaryKeys(self: *Parser) ParserError!ArrayList(Expression) {
+        var pks = ArrayList(Expression).init(self.gpa.*);
         switch (self.curr.type) {
             .Lparen => {
                 while (self.peek.type != .Rparen or self.peek.type != .EOF) {
-                    try self.nextToken();
+                    self.nextToken();
                     if (self.curr.type == .Rparen) break;
                     if (self.curr.type != .Identifier)
                         return ParserError.InvalidColumnName;
                     const name = try self.parseIdentifier();
                     if (!self.expect(.Comma) and self.peek.type != .Rparen)
                         return ParserError.MissingComma;
-                    try pks.append(name);
+                    try pks.append(name.*);
                 }
             },
             .Identifier => {
                 const ident = try self.parseIdentifier();
-                try pks.append(ident);
+                try pks.append(ident.*);
             },
             else => return ParserError.MissingIdentifier,
         }
@@ -355,7 +356,7 @@ pub const Parser = struct {
         });
     }
 
-    fn parseColumnDDLExpression(self: *Parser) ParserError!*Expression {
+    fn parseColumnDDLExpression(self: *Parser) ParserError!Expression {
         const dtype: DataType = switch (self.curr.type) {
             .I8 => .Int8,
             .I16 => .Int16,
@@ -376,7 +377,7 @@ pub const Parser = struct {
 
         if (!self.expect(.Colon))
             return ParserError.MissingColon;
-        try self.nextToken();
+        self.nextToken();
 
         if (self.curr.type != .Identifier)
             return ParserError.InvalidColumnName;
@@ -384,30 +385,34 @@ pub const Parser = struct {
 
         // if (!self.expect(.Comma) and self.peek.type != .Rparen)
         //     return ParserError.MissingComma;
-        // try self.nextToken();
-        return Expression.new(.ColumnDDL, .{
+        // self.nextToken();
+        // return Expression.new(.ColumnDDL, .{
+        //     .dtype = dtype,
+        //     .name = name,
+        // });
+        return Expression{ .ColumnDDL = .{
             .dtype = dtype,
             .name = name,
-        });
+        } };
     }
 
     fn parseReturnStatement(self: *Parser) ParserError!*Statement {
         // Bare expression from RETURN
         if (!self.expect(.From)) {
-            try self.nextToken();
+            self.nextToken();
             return try self.parseExpressionStatement();
         }
-        try self.nextToken();
+        self.nextToken();
         const table = try self.parseIdentifier();
 
         if (!self.expect(.Project)) {
             return ParserError.NoProjectInReturn;
         }
 
-        try self.nextToken();
-        const columns = self.parseProjectColumns() catch |e| return e;
+        self.nextToken();
+        var columns = self.parseProjectColumns() catch |e| return e;
 
-        var select: ?ArrayList(*Expression) = undefined;
+        var select: ?ArrayList(Expression) = undefined;
         if (self.expect(.Select)) {
             select = self.parseSelectStatement() catch |e| return e;
         }
@@ -418,9 +423,9 @@ pub const Parser = struct {
         }
         return Statement.new(.Return, .{
             .from = table,
-            .project = columns,
+            .project = try columns.toOwnedSlice(),
             .limit = limit,
-            .select = select,
+            .select = try select.?.toOwnedSlice(),
         });
     }
 
@@ -443,7 +448,7 @@ pub const Parser = struct {
         {
             const infix = Infix.get(self.peek.type);
             if (infix == null) return ParserError.InfixNotFound;
-            try self.nextToken();
+            self.nextToken();
 
             left = switch (infix.?) {
                 Infix.Standard => try self.parseInfixExpression(left),
@@ -463,7 +468,7 @@ pub const Parser = struct {
     fn parseInfixExpression(self: *Parser, left: *Expression) ParserError!*Expression {
         const precedence = self.currPrecedence();
         const op = self.curr.literal;
-        try self.nextToken();
+        self.nextToken();
         const right = try self.parseExpression(precedence);
 
         return Expression.new(.Infix, .{
@@ -474,28 +479,28 @@ pub const Parser = struct {
     }
 
     fn parseCallExpression(self: *Parser, func: *Expression) ParserError!*Expression {
-        const args = try self.parseExpressionList(.Rparen);
+        var args = try self.parseExpressionList(.Rparen);
 
         return Expression.new(.Call, .{
             .func = func,
-            .args = args,
+            .args = try args.toOwnedSlice(),
         });
     }
 
-    fn parseExpressionList(self: *Parser, end: TokenType) ParserError!ArrayList(*Expression) {
-        var list = ArrayList(*Expression).init(self.gpa.*);
+    fn parseExpressionList(self: *Parser, end: TokenType) ParserError!ArrayList(Expression) {
+        var list = ArrayList(Expression).init(self.gpa.*);
         if (self.peek.type == end) {
-            try self.nextToken();
+            self.nextToken();
             return list;
         }
 
-        try self.nextToken();
-        try list.append(try self.parseExpression(.Lowest));
+        self.nextToken();
+        try list.append((try self.parseExpression(.Lowest)).*);
 
         while (self.peek.type == .Comma) {
-            try self.nextToken();
-            try self.nextToken();
-            try list.append(try self.parseExpression(.Lowest));
+            self.nextToken();
+            self.nextToken();
+            try list.append((try self.parseExpression(.Lowest)).*);
         }
 
         if (!self.expect(end))
@@ -503,37 +508,40 @@ pub const Parser = struct {
         return list;
     }
 
-    fn parseProjectColumns(self: *Parser) ParserError!ArrayList(*Expression) {
-        var columns = ArrayList(*Expression).init(self.gpa.*);
+    fn parseProjectColumns(self: *Parser) ParserError!ArrayList(Expression) {
+        var columns = ArrayList(Expression).init(self.gpa.*);
 
-        columns.append(try self.parseIdentifier()) catch {
+        const i = try self.parseIdentifier();
+        columns.append(i.*) catch {
             return ParserError.OutOfMemory;
         };
 
         while (self.peek.type == .Comma) {
-            try self.nextToken();
+            self.nextToken();
             switch (self.peek.type) {
                 .Semicolon, .Limit, .Rename, .Select => break,
                 else => {},
             }
-            try self.nextToken();
-            columns.append(try self.parseIdentifier()) catch {
-                return ParserError.OutOfMemory;
-            };
+            self.nextToken();
+            const ident = try self.parseIdentifier();
+            try columns.append(ident.*);
+            // catch {
+            //     return ParserError.OutOfMemory;
+            // };
         }
         return columns;
     }
 
-    fn parseSelectStatement(self: *Parser) ParserError!?ArrayList(*Expression) {
-        try self.nextToken();
-        var clauses = ArrayList(*Expression).init(self.gpa.*);
+    fn parseSelectStatement(self: *Parser) ParserError!?ArrayList(Expression) {
+        self.nextToken();
+        var clauses = ArrayList(Expression).init(self.gpa.*);
         while (self.peek.type != .Semicolon and self.peek.type != .Limit) {
             const expr = self.parseExpression(Precedence.Lowest) catch |e| return e;
-            try clauses.append(expr);
+            try clauses.append(expr.*);
             if (self.peek.type == .And or self.peek.type == .Or) {
                 // TODO: handle boolean infixes using && and ||
-                try self.nextToken();
-                try self.nextToken();
+                self.nextToken();
+                self.nextToken();
             }
         }
         return if (clauses.items.len == 0) null else clauses;
@@ -552,10 +560,10 @@ pub const Parser = struct {
     }
 
     fn parseRowValues(self: *Parser) ParserError!*Expression {
-        var rows = ArrayList(*Expression).init(self.gpa.*);
+        var rows = ArrayList(Expression).init(self.gpa.*);
         while (self.peek.type != .Rbrace and self.peek.type != .EOF) {
             if (self.peek.type == .Comment) {
-                try self.nextToken();
+                self.nextToken();
                 continue;
             }
             const row = switch (self.curr.type) {
@@ -564,24 +572,24 @@ pub const Parser = struct {
                 .True, .False => try self.parseBoolean(),
                 else => return ParserError.UnexpectedToken,
             };
-            rows.append(row) catch
+            rows.append(row.*) catch
                 return ParserError.OutOfMemory;
 
             if (self.peek.type == .Comma)
-                try self.nextToken();
-            try self.nextToken();
+                self.nextToken();
+            self.nextToken();
             if (self.curr.type == .Rparen)
                 break;
         }
         if (self.curr.type != .Rparen)
             return ParserError.MissingRparen;
-        try self.nextToken();
+        self.nextToken();
 
-        return Expression.new(.Rows, rows);
+        return Expression.new(.Rows, try rows.toOwnedSlice());
     }
 
     fn parseGroupedExpression(self: *Parser) ParserError!*Expression {
-        try self.nextToken();
+        self.nextToken();
         const e = self.parseExpression(.Lowest);
         if (!self.expect(.Rparen))
             return ParserError.MissingRparen;
@@ -608,9 +616,9 @@ pub const Parser = struct {
         }
     }
 
-    fn parseNumberType(self: *Parser) fmt.ParseIntError!*NumberUnion {
-        const n = self.gpa.create(NumberUnion) catch return fmt.ParseIntError.Overflow;
-        n.* = switch (self.curr.type) {
+    fn parseNumberType(self: *Parser) fmt.ParseIntError!NumberUnion {
+        // const n = self.gpa.create(NumberUnion) catch return fmt.ParseIntError.Overflow;
+        return switch (self.curr.type) {
             .I8 => NumberUnion{ .Int8 = try fmt.parseInt(i8, self.curr.literal, 10) },
             .I16 => NumberUnion{ .Int16 = try fmt.parseInt(i16, self.curr.literal, 10) },
             .I32 => NumberUnion{ .Int32 = try fmt.parseInt(i32, self.curr.literal, 10) },
@@ -625,7 +633,6 @@ pub const Parser = struct {
             .Number => NumberUnion{ .Int64 = try fmt.parseInt(i64, self.curr.literal, 10) },
             else => return fmt.ParseIntError.InvalidCharacter,
         };
-        return n;
     }
 
     fn parseNumber(self: *Parser) ParserError!*Expression {
@@ -650,14 +657,14 @@ pub const Parser = struct {
 
     fn expect(self: *Parser, ttype: TokenType) bool {
         if (self.peek.type == ttype) {
-            self.nextToken() catch return false;
+            self.nextToken();
             return true;
         }
         return false;
     }
 
-    pub fn nextToken(self: *Parser) !void {
+    pub fn nextToken(self: *Parser) void {
         std.mem.swap(Token, &self.curr, &self.peek);
-        self.peek = try self.lexer.nextToken();
+        self.peek = self.lexer.nextToken();
     }
 };

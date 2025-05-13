@@ -3,228 +3,206 @@ const token = @import("token.zig");
 const Allocator = std.mem.Allocator;
 const Token = token.Token;
 const TokenType = token.TokenType;
-const KEYWORDS = token.KEYWORDS;
-
-const NumberPair = struct {
-    str: []const u8,
-    ttype: TokenType,
-};
-
-fn numberPair(str: []const u8, ttype: TokenType) NumberPair {
-    return .{ str, ttype };
-}
 
 pub const Lexer = struct {
-    input: *[]const u8,
+    input: []const u8,
     curr: usize,
-    peek_pos: usize,
-    char: ?u8,
+    peek: usize,
+    char: u8,
 
-    pub fn init(input: *[]const u8, gpa: *const Allocator) !*Lexer {
+    pub fn init(input: []const u8, gpa: *const Allocator) !*Lexer {
         const lexer = try gpa.create(Lexer);
         lexer.* = .{
             .input = input,
             .curr = 0,
-            .peek_pos = 0,
-            .char = input.*[0],
+            .peek = 0,
+            .char = input[0],
         };
-        lexer.read();
+        lexer.advance();
         return lexer;
     }
 
-    pub fn nextToken(self: *Lexer) !Token {
-        while (self.char != null and std.ascii.isWhitespace(self.char.?))
-            self.read();
+    pub fn nextToken(self: *Lexer) Token {
+        while (std.ascii.isWhitespace(self.char))
+            self.advance();
 
-        if (self.char == null)
-            return Token.init("", TokenType.EOF);
-
-        const ch = self.input.*[self.curr..self.peek_pos];
-        var pair: []const u8 = "";
-        if (self.peek_pos < self.input.len) {
-            pair = self.input.*[self.curr .. self.peek_pos + 1];
+        if (self.peekChar() == 0) {
+            return Token.new(.EOF, "\\0");
         }
 
-        var read_next = true;
-        const tok = switch (self.char.?) {
-            '!' => switch (self.peek().?) {
-                '=' => self.pairAndAdvance(pair, .NotEqual),
-                '>' => self.pairAndAdvance(pair, .AntiJoin),
-                else => Token.init(ch, .Bang),
+        const ch = &[_]u8{self.char};
+        const next = self.peekChar();
+        const tok = switch (self.char) {
+            0 => Token.new(.EOF, "\\0"),
+            '!' => switch (next) {
+                '=' => self.pairAndAdvance(.NotEqual),
+                '>' => self.pairAndAdvance(.AntiJoin),
+                else => Token.new(.Bang, ch),
             },
-            '@' => Token.init(ch, .At),
-            '#' => Token.init(ch, .Hashtag),
-            '$' => Token.init(ch, .Dollar),
-            '%' => Token.init(ch, .Percent),
-            '^' => Token.init(ch, .Caret),
-            '&' => switch (self.peek().?) {
-                '&' => self.pairAndAdvance(pair, .And),
-                else => Token.init(ch, .Ampersand),
+            '@' => Token.new(.At, ch),
+            '#' => Token.new(.Hashtag, ch),
+            '$' => Token.new(.Dollar, ch),
+            '%' => Token.new(.Percent, ch),
+            '^' => Token.new(.Caret, ch),
+            '&' => switch (next) {
+                '&' => self.pairAndAdvance(.And),
+                else => Token.new(.Ampersand, ch),
             },
-            '*' => Token.init(ch, .Asterisk),
-            '_' => Token.init(ch, .Underscore),
-            '-' => switch (self.peek().?) {
-                '>' => self.pairAndAdvance(pair, .SingleArrow),
-                else => Token.init(ch, .Dash),
+            '*' => Token.new(.Asterisk, ch),
+            '_' => Token.new(.Underscore, ch),
+            '-' => switch (next) {
+                '>' => self.pairAndAdvance(.SingleArrow),
+                else => Token.new(.Dash, ch),
             },
-            '+' => Token.init(ch, .Plus),
-            '=' => switch (self.peek().?) {
-                '=' => self.pairAndAdvance(pair, .Equality),
-                '>' => self.pairAndAdvance(pair, .DoubleArrow),
-                else => Token.init(ch, .Equal),
+            '+' => Token.new(.Plus, ch),
+            '=' => switch (next) {
+                '=' => self.pairAndAdvance(.Equality),
+                '>' => self.pairAndAdvance(.DoubleArrow),
+                else => Token.new(.Equal, ch),
             },
-            ';' => Token.init(ch, .Semicolon),
-            ':' => switch (self.peek().?) {
-                '=' => self.pairAndAdvance(pair, .Assign),
-                else => Token.init(ch, .Colon),
+            ';' => Token.new(.Semicolon, ch),
+            ':' => switch (next) {
+                '=' => self.pairAndAdvance(.Assign),
+                else => Token.new(.Colon, ch),
             },
-            '\'' => Token.init(self.readString(), .String),
-            '"' => Token.init(ch, .Quote),
-            '<' => switch (self.peek().?) {
-                '=' => self.pairAndAdvance(pair, .LessThanEqual),
-                '<' => self.pairAndAdvance(pair, .LeftSemiJoin),
-                // '>' => self.pairAndAdvance(pair, .FullOuterJoin),
-                else => Token.init(ch, .LessThan),
+            '\'' => Token.new(.String, self.readString()),
+            '"' => Token.new(.Quote, ch),
+            '<' => switch (next) {
+                '=' => self.pairAndAdvance(.LessThanEqual),
+                '<' => self.pairAndAdvance(.LeftSemiJoin),
+                // '>' => self.pairAndAdvance(.FullOuterJoin),
+                else => Token.new(.LessThan, ch),
             },
-            '>' => switch (self.peek().?) {
-                '=' => self.pairAndAdvance(pair, .GreaterThanEqual),
-                '<' => self.pairAndAdvance(pair, .NaturalJoin),
-                '>' => self.pairAndAdvance(pair, .RightSemiJoin),
-                else => Token.init(ch, .GreaterThan),
+            '>' => switch (next) {
+                '=' => self.pairAndAdvance(.GreaterThanEqual),
+                '<' => self.pairAndAdvance(.NaturalJoin),
+                '>' => self.pairAndAdvance(.RightSemiJoin),
+                else => Token.new(.GreaterThan, ch),
             },
-            ',' => Token.init(ch, .Comma),
-            '.' => Token.init(ch, .Period),
-            '?' => Token.init(ch, .Question),
-            '/' => switch (self.peek().?) {
-                '/' => {
-                    const str = self.readComment();
-                    return Token.init(str, .Comment);
-                },
-                else => Token.init(ch, .Slash),
+            ',' => Token.new(.Comma, ch),
+            '.' => Token.new(.Period, ch),
+            '?' => Token.new(.Question, ch),
+            '/' => switch (next) {
+                '/' => Token.new(.Comment, self.readComment()),
+                else => Token.new(.Slash, ch),
             },
-            '|' => switch (self.peek().?) {
-                '|' => self.pairAndAdvance(pair, .Or),
-                // '>' => self.pairAndAdvance(pair, .RightOuterJoin),
-                else => Token.init(ch, .Pipe),
+            '|' => switch (next) {
+                '|' => self.pairAndAdvance(.Or),
+                '>' => self.pairAndAdvance(.RightOuterJoin),
+                else => Token.new(.Pipe, ch),
             },
-            '\\' => Token.init(ch, .Backslash),
-            '(' => Token.init(ch, .Lparen),
-            ')' => Token.init(ch, .Rparen),
-            '[' => switch (self.peek().?) {
-                ']' => self.pairAndAdvance(pair, .ThetaJoin),
-                else => Token.init(ch, .Lbracket),
+            '\\' => Token.new(.Backslash, ch),
+            '(' => Token.new(.Lparen, ch),
+            ')' => Token.new(.Rparen, ch),
+            '[' => switch (next) {
+                ']' => self.pairAndAdvance(.ThetaJoin),
+                else => Token.new(.Lbracket, ch),
             },
-            ']' => Token.init(ch, .Rbracket),
-            '{' => Token.init(ch, .Lbrace),
-            '}' => Token.init(ch, .Rbrace),
-            '0'...'9' => {
-                read_next = false;
-                const res = self.readNumber();
-                return Token.init(res.str, res.ttype);
-            },
-            'A'...'Z', 'a'...'z' => {
-                read_next = false;
-                const p = self.peek();
-                if (p == null) return Token.init(" ", .EOF);
-                if (p.? == ':') {
-                    const ident = pair;
-                    self.read();
-                    self.read();
-                    const keyword = KEYWORDS.get(ident);
-                    if (keyword == null)
-                        return Token.init(ident, .Identifier);
-                    return Token.init(ident, keyword.?);
-                } else {
-                    const ident = self.readIdentifier();
-                    var lower_buf = [_]u8{0} ** 100;
-                    const lower = std.ascii.lowerString(&lower_buf, ident);
-                    const keyword = KEYWORDS.get(lower);
-                    if (keyword == null)
-                        return Token.init(ident, .Identifier);
-                    return Token.init(ident, keyword.?);
-                }
-            },
-            else => Token.init("ILLEGAL", .Illegal),
+            ']' => Token.new(.Rbracket, ch),
+            '{' => Token.new(.Lbrace, ch),
+            '}' => Token.new(.Rbrace, ch),
+            '0'...'9' => return self.readNumber(),
+            'a'...'z', 'A'...'Z' => return self.readIdentifier(),
+            else => Token.new(.Illegal, "ILLEGAL"),
         };
-        if (read_next) self.read();
+        self.advance();
         return tok;
     }
 
-    fn pairAndAdvance(self: *Lexer, pair: []const u8, ttype: TokenType) Token {
-        self.read();
-        self.read();
-        return Token.init(pair, ttype);
+    inline fn pairAndAdvance(self: *Lexer, ttype: TokenType) Token {
+        const start = self.curr;
+        self.advance();
+        self.advance();
+        return Token.new(ttype, self.input[start..self.curr]);
     }
 
-    fn readString(self: *Lexer) []const u8 {
-        self.read();
+    inline fn readString(self: *Lexer) []const u8 {
+        self.advance();
         const pos = self.curr;
-        while (self.char != null and self.char.? != '\'') {
+        while (self.char != '\'' and self.char != '\n' and self.char != '\r') {
             // skip escape quote char
-            if (self.char.? == '\\' and self.peek() == '\'') {
-                self.read();
-                self.read();
-                continue;
+            if (self.char == '\\' and self.peekChar() == '\'')
+                self.advance();
+            self.advance();
+        }
+        return self.input[pos..self.curr];
+    }
+
+    inline fn readComment(self: *Lexer) []const u8 {
+        const pos = self.curr;
+        while (self.char != '\n' and self.char != '\r')
+            self.advance();
+        return self.input[pos..self.curr];
+    }
+
+    inline fn readIdentifier(self: *Lexer) Token {
+        const p = self.peekChar();
+        if (p == 0) return Token.new(.EOF, "\\0");
+        if (p == ':') {
+            const ident = self.input[self.curr .. self.peek + 1];
+            self.advance();
+            self.advance();
+            const tok = switch (ident[0]) {
+                'S' => Token.new(.Select, ident),
+                'F' => Token.new(.From, ident),
+                'P' => Token.new(.Project, ident),
+                'R' => Token.new(.Rename, ident),
+                'G' => Token.new(.Group, ident),
+                'L' => Token.new(.Limit, ident),
+                else => Token.new(.Identifier, ident),
+            };
+
+            return tok;
+        } else {
+            var has_upper = false;
+            const pos = self.curr;
+            while (std.ascii.isAlphanumeric(self.char) or self.char == '_') {
+                if (!has_upper and std.ascii.isUpper(self.char))
+                    has_upper = true;
+                self.advance();
             }
-            self.read();
+            var ident = self.input[pos..self.curr];
+            if (has_upper) {
+                var lower_buf = [_]u8{0} ** 100;
+                ident = std.ascii.lowerString(&lower_buf, ident);
+            }
+            if (token.KeywordMap.get(ident)) |k|
+                return Token.new(k, ident);
+            return Token.new(.Identifier, ident);
         }
-
-        const diff = self.curr - pos;
-        return self.input.*[pos .. pos + diff];
     }
 
-    fn readComment(self: *Lexer) []const u8 {
-        const pos = self.curr;
-
-        while (self.char != null and self.char.? != '\n') {
-            self.read();
-        }
-
-        const diff = self.curr - pos;
-        return self.input.*[pos .. pos + diff];
-    }
-
-    fn readIdentifier(self: *Lexer) []const u8 {
-        const pos = self.curr;
-
-        while (self.char != null and (std.ascii.isAlphanumeric(self.char.?) or self.char.? == '_'))
-            self.read();
-
-        const diff = self.curr - pos;
-        return self.input.*[pos .. pos + diff];
-    }
-
-    fn readNumber(self: *Lexer) NumberPair {
+    inline fn readNumber(self: *Lexer) Token {
         const pos = self.curr;
         var is_float = false;
-
-        while (self.char != null and (std.ascii.isDigit(self.char.?) or self.char.? == '.')) {
-            if (self.char.? == '.') {
-                if (is_float)
-                    return .{ .str = "ILLEGAL", .ttype = .Illegal };
+        while (std.ascii.isDigit(self.char) or self.char == '.') {
+            if (self.char == '.') {
+                if (is_float) {
+                    self.advance();
+                    return Token.new(.Illegal, "ILLEGAL");
+                }
                 is_float = true;
             }
-            self.read();
+            self.advance();
         }
-        const diff = self.curr - pos;
-        const str = self.input.*[pos .. pos + diff];
         if (is_float)
-            return .{ .str = str, .ttype = .Float };
-        return .{ .str = str, .ttype = .Number };
+            return Token.new(.Float, self.input[pos..self.curr]);
+        return Token.new(.Number, self.input[pos..self.curr]);
     }
 
-    fn peek(self: *Lexer) ?u8 {
-        if (self.peek_pos <= self.input.len)
-            return self.input.*[self.peek_pos];
-        return null;
+    inline fn peekChar(self: *Lexer) u8 {
+        if (self.peek <= self.input.len)
+            return self.input[self.peek];
+        return 0;
     }
 
-    fn read(self: *Lexer) void {
-        self.curr = self.peek_pos;
-        self.peek_pos = self.curr + 1;
-        if (self.peek_pos <= self.input.len)
-            self.char = self.input.*[self.curr]
+    inline fn advance(self: *Lexer) void {
+        if (self.peek >= self.input.len)
+            self.char = 0
         else
-            self.char = null;
+            self.char = self.input[self.peek];
+
+        self.curr = self.peek;
+        self.peek += 1;
     }
 };

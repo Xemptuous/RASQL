@@ -1,5 +1,4 @@
 const std = @import("std");
-const ArrayList = std.ArrayList;
 const TokenType = @import("token.zig").TokenType;
 const Decimal = struct { length: u8, precision: u8 };
 
@@ -109,7 +108,7 @@ pub const Expression = union(ExpressionType) {
         column: *Expression, // Identifier
         table: *Expression, // Identifier
     },
-    SelectDML: ArrayList(*Expression),
+    SelectDML: []Expression,
     Infix: struct {
         left: *Expression,
         op: []const u8,
@@ -117,17 +116,17 @@ pub const Expression = union(ExpressionType) {
     },
     Call: struct {
         func: *Expression,
-        args: ?ArrayList(*Expression),
+        args: ?[]Expression,
     },
-    ProjectClause: ArrayList(*Expression),
+    ProjectClause: []Expression,
     RenameClause: struct {
         from: *Expression, // Identifier
         to: *Expression, // Identifier
     },
-    Rows: ArrayList(*Expression),
+    Rows: []Expression,
     Identifier: []const u8,
     String: []const u8,
-    Number: *NumberUnion,
+    Number: NumberUnion,
     Boolean: bool,
 
     pub fn new(comptime t: ExpressionType, data: anytype) !*Expression {
@@ -164,7 +163,7 @@ pub const Expression = union(ExpressionType) {
                 i.func.print();
                 if (i.args != null) {
                     std.debug.print(", args = ", .{});
-                    for (i.args.?.items) |arg| {
+                    for (i.args.?) |arg| {
                         arg.print();
                     }
                 }
@@ -182,13 +181,13 @@ pub const Expression = union(ExpressionType) {
                 i.dtype.print();
             },
             .Rows => |row| {
-                for (row.items) |r| {
+                for (row) |r| {
                     r.print();
                     std.debug.print(", ", .{});
                 }
             },
             .ProjectClause => |clause| {
-                for (clause.items) |p| {
+                for (clause) |p| {
                     p.print();
                     std.debug.print(", ", .{});
                 }

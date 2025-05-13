@@ -1,11 +1,8 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const ArrayList = std.ArrayList;
 
 const PAGE_SIZE = @import("page/page.zig").PAGE_SIZE;
 const PF_FileManager = @import("page/manager.zig").FileManager;
-const PF_FileHandle = @import("page/file.zig").FileHandle;
-const PF_Page = @import("page/page.zig").Page;
 
 const statement = @import("parser/statement.zig");
 const Statement = statement.Statement;
@@ -13,16 +10,11 @@ const Statement = statement.Statement;
 const expression = @import("parser/expression.zig");
 const Expression = expression.Expression;
 
-const Header = @import("page/header.zig").Header;
-const HeaderFileType = @import("page/header.zig").FileType;
-
 const DataType = @import("table/row.zig").DataType;
-const Row = @import("table/row.zig").Row;
 const RowValue = @import("table/row.zig").RowValue;
 const Column = @import("table/column.zig").Column;
 const Table = @import("table/table.zig").Table;
 
-const token = @import("parser/token.zig");
 const Lexer = @import("parser/lexer.zig").Lexer;
 
 const Parser = @import("parser/parser.zig").Parser;
@@ -36,16 +28,10 @@ pub fn main() !void {
     defer expression.ExpressionArena.deinit();
 
     const f = try std.fs.cwd().openFile("input.txt", .{});
-    var input = try f.readToEndAlloc(allocator, 10000);
+    const input = try f.readToEndAlloc(allocator, 10000);
 
-    const lexer = try Lexer.init(&input, &allocator);
+    const lexer = try Lexer.init(input, &allocator);
     defer allocator.destroy(lexer);
-    // var tok: token.Token = undefined;
-    // while (true) {
-    //     tok = try lexer.nextToken();
-    //     if (tok.type == token.TokenType.EOF) break;
-    //     tok.print();
-    // }
 
     const parser = try Parser.init(&allocator, lexer);
     defer allocator.destroy(parser);
@@ -63,27 +49,21 @@ pub fn main() !void {
         std.debug.print("\n", .{});
     }
 
-    std.debug.print("Expression: {d}\n", .{@sizeOf(Expression)});
-    std.debug.print("Statement: {d}\n", .{@sizeOf(Statement)});
-    std.debug.print("ArrayList: {d}\n", .{@sizeOf(std.ArrayList(*Expression))});
-    std.debug.print("ArrayListUnmanaged: {d}\n", .{@sizeOf(std.ArrayListUnmanaged(*Expression))});
-    std.debug.print("ArrayListAligned: {d}\n", .{@sizeOf(std.ArrayListAligned(*Expression, null))});
-
     std.debug.print("Time elapsed: {d:.3}ms\n", .{elapsed / std.time.ns_per_ms});
 }
 
 fn generateSampleTable(gpa: Allocator) !*Table {
-    var columns = try ArrayList(Column).initCapacity(gpa, 3);
+    var columns = try std.ArrayList(Column).initCapacity(gpa, 3);
     try columns.appendSlice(&[3]Column{
-        Column{ .name = "id", .type = DataType.Int32, .nullable = false },
-        Column{ .name = "fname", .type = DataType.String, .nullable = false },
-        Column{ .name = "is_active", .type = DataType.Boolean, .nullable = false },
+        Column{ .name = "id", .type = .Int32, .nullable = false },
+        Column{ .name = "fname", .type = .String, .nullable = false },
+        Column{ .name = "is_active", .type = .Boolean, .nullable = false },
     });
 
     const file = try PF_FileManager.openFile(gpa, "sample_names.txt");
     defer file.file.close();
 
-    var rows = ArrayList(RowValue).init(gpa);
+    var rows = std.ArrayList(RowValue).init(gpa);
 
     var buf_reader = std.io.bufferedReader(file.file.reader());
     var in_stream = buf_reader.reader();
@@ -91,9 +71,9 @@ fn generateSampleTable(gpa: Allocator) !*Table {
     var id: u32 = 0;
     while (try in_stream.readUntilDelimiterOrEofAlloc(gpa, '\n', 64)) |line| {
         try rows.appendSlice(&[_]RowValue{
-            RowValue{ .Uint32 = id },
-            RowValue{ .String = line },
-            RowValue{ .Boolean = rand.boolean() },
+            .{ .Uint32 = id },
+            .{ .String = line },
+            .{ .Boolean = rand.boolean() },
         });
         id += 1;
     }
@@ -112,7 +92,7 @@ fn generateSampleTable(gpa: Allocator) !*Table {
 //     var page = PF_Page.init();
 //     var pdata: usize = 0;
 //     try table.serialize(&file, &page, &pdata);
-//     var table_data = try ArrayList(u8).initCapacity(gpa, table.columns.items.len * 10 + table.rows.items.len * 8);
+//     var table_data = try std.ArrayList(u8).initCapacity(gpa, table.columns.items.len * 10 + table.rows.items.len * 8);
 //     defer table_data.deinit();
 //
 //     {
@@ -157,7 +137,7 @@ fn readTableFromFile(gpa: Allocator) !void {
     var file = try PF_FileManager.openFile(gpa, "employee");
     defer PF_FileManager.closeFile(&file);
 
-    var table_data = try ArrayList(u8).init(gpa);
+    var table_data = try std.ArrayList(u8).init(gpa);
     defer table_data.deinit();
 
     var pdata: usize = 0;

@@ -1,6 +1,6 @@
 const std = @import("std");
 
-pub const TokenType = enum {
+pub const TokenType = enum(u8) {
     // Keywords
     Database,
     Schema,
@@ -108,7 +108,7 @@ pub const Token = struct {
     literal: []const u8,
     type: TokenType,
 
-    pub fn init(literal: []const u8, ttype: TokenType) Token {
+    pub fn new(ttype: TokenType, literal: []const u8) Token {
         return .{ .literal = literal, .type = ttype };
     }
 
@@ -117,13 +117,7 @@ pub const Token = struct {
     }
 };
 
-pub const KEYWORDS = std.StaticStringMap(TokenType).initComptime(.{
-    .{ "S:", .Select },
-    .{ "F:", .From },
-    .{ "P:", .Project },
-    .{ "R:", .Rename },
-    .{ "G:", .Group },
-    .{ "L:", .Limit },
+pub const KeywordMap = std.StaticStringMap(TokenType).initComptime(.{
     .{ "i8", .I8 },
     .{ "i16", .I16 },
     .{ "i32", .I32 },
